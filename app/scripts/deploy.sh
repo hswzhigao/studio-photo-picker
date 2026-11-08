@@ -5,13 +5,7 @@ APP_DIR="${APP_DIR:-/srv/studio-photo-picker/app/app}"
 SERVICE="${SERVICE:-studio-photo-picker.service}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3100/api/health}"
 BRANCH="${BRANCH:-main}"
-ENV_FILE="${ENV_FILE:-/srv/studio-photo-picker/app.env}"
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$ENV_FILE"
-  set +a
-fi
+DATA_DIR="${DATA_DIR:-/srv/studio-photo-picker/data}"
 cd "$APP_DIR"
 
 old_rev="$(git rev-parse HEAD)"
@@ -25,7 +19,7 @@ rollback() {
 trap rollback ERR
 
 git fetch origin "$BRANCH"
-node scripts/backup.js
+DATA_DIR="$DATA_DIR" node scripts/backup.js
 git merge --ff-only "origin/$BRANCH"
 npm ci
 npm test -- --run
