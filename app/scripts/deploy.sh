@@ -11,7 +11,7 @@ old_rev="$(git rev-parse HEAD)"
 rollback() {
   echo "部署失败，尝试回滚到 ${old_rev}" >&2
   git reset --hard "$old_rev" || true
-  npm ci --omit=dev || true
+  npm ci || true
   npm run build || true
   sudo systemctl restart "$SERVICE" || true
 }
