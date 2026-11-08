@@ -5,8 +5,18 @@ const sourceRoot = path.resolve(process.cwd(), '..', '..');
 const projectRoot = path.resolve(process.cwd(), '..');
 const legacyDataDir = path.resolve(process.cwd(), 'data');
 const hasCustomDataDir = Boolean(process.env.DATA_DIR);
+const envFlag = (name, fallback = false) => process.env[name] === undefined ? fallback : /^(1|true|yes)$/i.test(process.env[name]);
 export const config = {
+  host: process.env.HOST || '127.0.0.1',
   port: Number(process.env.PORT || 3000),
+  publicUrl: String(process.env.PUBLIC_URL || '').replace(/\/$/, ''),
+  seedDemo: envFlag('SEED_DEMO', false),
+  trustProxy: envFlag('TRUST_PROXY', false) ? 1 : false,
+  cookieSecure: process.env.NODE_ENV === 'production' || envFlag('COOKIE_SECURE', false),
+  production: process.env.NODE_ENV === 'production',
+  version: process.env.APP_VERSION || '1.0.0',
+  loginRateLimitMax: Number(process.env.LOGIN_RATE_LIMIT_MAX || 10),
+  loginRateLimitWindowMs: Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || 60_000),
   photoSourceDir: path.resolve(process.env.PHOTO_SOURCE_DIR || sourceRoot),
   dataDir: path.resolve(process.env.DATA_DIR || path.join(projectRoot, 'data')),
   studioName: '名人婚纱',

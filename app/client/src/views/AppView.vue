@@ -71,7 +71,7 @@ async function createCustomer() {
     newCustomerName.value = ''; newCustomerPhone.value = ''; newCustomerPassword.value = ''; await loadCustomers();
   } catch (e) { error.value = e.message || '创建客户失败'; }
 }
-async function resetCustomer(customer) { try { const result = await api.post(`/api/admin/customers/${customer.id}/reset-password`); passwordCard.value = { type: '重置', ...customer, password: result.password }; passwordCopied.value = false; } catch (e) { error.value = e.message; } }
+async function resetCustomer(customer) { try { const result = await api.post(`/api/admin/customers/${customer.id}/reset-password`); passwordCard.value = { type: '重置', ...customer, password: result.password, url: result.url }; passwordCopied.value = false; } catch (e) { error.value = e.message; } }
 async function copyPasswordCard() {
   if (!passwordCard.value) return;
   const text = loginInfoText(passwordCard.value);

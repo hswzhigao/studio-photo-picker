@@ -2,18 +2,20 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
+import sharp from 'sharp';
 import { union } from '../../services/selection.js';
 import { generateReadablePassword, suppliedPassword } from '../../services/credentials.js';
 import { backupDatabase, backupStats, pruneBackups } from '../../services/backup.js';
 
 export function registerAdmin(app, ctx) {
   const {
-    db, cfg, now, event, requireActor, jsonError, issueSession, exportCsv,
+    db, cfg, now, event, requireActor, jsonError, issueSession, exportCsv, loginGuard,
     importPhotos, scanSourceDirectory, changePassword, staffStudio, ownedJob,
-    adminOnly, err, authenticate, buildSummary,
+    adminOnly, err, authenticate, buildSummary, uploadPhotos,
   } = ctx;
 
   app.post('/api/admin/login', (req, res) => {
+    if (!loginGuard(req, res)) return;
     const result = authenticate('staff', String(req.body.phone || ''), String(req.body.password || ''));
     if (result.error) return jsonError(res, result.error === 'ACCOUNT_LOCKED' ? 423 : 401, result.error, '账号或密码错误');
     const staff = result.account;
@@ -51,7 +53,7 @@ export function registerAdmin(app, ctx) {
     const password = suppliedPassword(req.body.password) || generateReadablePassword(), t = now();
     try {
       const id = db.prepare('insert into customer(studio_id,name,phone,password_hash,must_change_password,created_by,created_at,updated_at) values(?,?,?,?,?,?,?,?)').run(staffStudio(req.actor).studio_id, name, phone, bcrypt.hashSync(password, 10), 1, req.actor.actor_id, t, t).lastInsertRowid;
-      res.status(201).json({ ok: true, password, customer: { id, name, phone } });
+      res.status(201).json({ ok: true, password, customer: { id, name, phone, url: cfg.publicUrl || undefined } });
     } catch {
       return jsonError(res, 409, 'ACCOUNT_EXISTS', '客户账号已存在');
     }
@@ -69,7 +71,7 @@ export function registerAdmin(app, ctx) {
     const password = suppliedPassword(req.body.password) || generateReadablePassword();
     db.prepare('update customer set password_hash=?,must_change_password=1,password_version=password_version+1 where id=?').run(bcrypt.hashSync(password, 10), c.id);
     db.prepare("delete from session where actor_type='customer' and actor_id=?").run(c.id);
-    res.json({ ok: true, password });
+    res.json({ ok: true, password, url: cfg.publicUrl || undefined });
   });
   app.post('/api/admin/staff', requireActor('staff'), (req, res) => {
     if (!adminOnly(req, res)) return;
@@ -97,7 +99,7 @@ export function registerAdmin(app, ctx) {
     if (!s) return jsonError(res, 404, 'NOT_FOUND', '员工不存在');
     const password = suppliedPassword(req.body.password) || generateReadablePassword();
     db.prepare('update staff set password_hash=?,must_change_password=1,password_version=password_version+1 where id=?').run(bcrypt.hashSync(password, 10), s.id);
-    res.json({ ok: true, password });
+    res.json({ ok: true, password, url: cfg.publicUrl || undefined });
   });
 
   app.get('/api/admin/jobs', requireActor('staff'), (req, res) => {
@@ -173,6 +175,37 @@ export function registerAdmin(app, ctx) {
   app.get('/api/admin/jobs/:id/photos', requireActor('staff'), (req, res) => {
     if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
     res.json({ photos: db.prepare('select * from photo where job_id=? order by sort,id').all(+req.params.id) });
+  });
+  app.post('/api/admin/jobs/:id/photos/upload', requireActor('staff'), uploadPhotos.array('photos', 100), async (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const files = req.files || [];
+    if (!files.length) return jsonError(res, 400, 'INVALID_UPLOAD', '请选择图片');
+    const uploadDir = path.join(cfg.dataDir, 'uploads', String(job.id));
+    fs.mkdirSync(uploadDir, { recursive: true });
+    const results = [];
+    try {
+      for (const file of files) {
+        const image = sharp(file.buffer);
+        let metadata;
+        try { metadata = await image.metadata(); } catch { throw Object.assign(new Error('INVALID_UPLOAD'), { code: 'INVALID_UPLOAD' }); }
+        if (!['jpeg', 'png', 'heic'].includes(metadata.format)) throw Object.assign(new Error('INVALID_UPLOAD'), { code: 'INVALID_UPLOAD' });
+        const extension = metadata.format === 'jpeg' ? '.jpg' : `.${metadata.format}`;
+        const filename = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_') || `photo-${Date.now()}${extension}`;
+        const originalPath = path.join(uploadDir, `${crypto.randomUUID()}-${filename}`);
+        fs.writeFileSync(originalPath, file.buffer, { mode: 0o600 });
+        const photoId = db.prepare('insert into photo(job_id,filename,original_key,sort,import_status,width,height) values(?,?,?,?,?,?,?)').run(job.id, filename, originalPath, db.prepare('select coalesce(max(sort),-1)+1 sort from photo where job_id=?').get(job.id).sort, 'processing', metadata.width || null, metadata.height || null).lastInsertRowid;
+        const thumb = path.join(cfg.dataDir, 'thumbnails', `${photoId}.webp`);
+        const preview = path.join(cfg.dataDir, 'previews', `${photoId}.webp`);
+        await sharp(file.buffer).rotate().resize({ width: 400, withoutEnlargement: true }).webp({ quality: 84 }).toFile(thumb);
+        await sharp(file.buffer).rotate().resize({ width: 1600, withoutEnlargement: true }).webp({ quality: 88 }).toFile(preview);
+        db.prepare('update photo set thumb_key=?,preview_key=?,import_status=? where id=?').run(thumb, preview, 'ready', photoId);
+        results.push(db.prepare('select * from photo where id=?').get(photoId));
+      }
+      return res.status(201).json({ photos: results });
+    } catch (error) {
+      return res.status(error.code === 'INVALID_UPLOAD' ? 400 : 500).json({ error: { code: error.code === 'INVALID_UPLOAD' ? 'INVALID_UPLOAD' : 'UPLOAD_FAILED', message: error.code === 'INVALID_UPLOAD' ? '只接受有效图片文件' : '上传处理失败' } });
+    }
   });
   app.patch('/api/admin/jobs/:id/photos/:photoId', requireActor('staff'), (req, res) => {
     if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');

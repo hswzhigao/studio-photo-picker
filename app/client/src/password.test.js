@@ -11,5 +11,7 @@ describe('customer password helpers', () => {
   it('formats the one-time login information for copying', () => {
     expect(loginInfoText({ name: '测试客户', phone: '13900000000', password: 'Abc23456' }))
       .toBe('客户：测试客户\n手机号：13900000000\n密码：Abc23456');
+    expect(loginInfoText({ name: '测试客户', phone: '13900000000', password: 'Abc23456', url: 'https://photo.example.com' }))
+      .toContain('网址：https://photo.example.com');
   });
 });

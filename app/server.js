@@ -45,10 +45,12 @@ try {
   initializeDatabase(db);
   await recoverInterruptedWork({ db, dataDir: config.dataDir, photoSourceDir: config.photoSourceDir, watermarkText: config.watermarkText });
   const jobId = seedDatabase(db, config);
-  const count = db.prepare("select count(*) count from photo where job_id=? and import_status='ready'").get(jobId).count;
-  if (!count) {
-    console.log('正在导入照片并生成预览…');
-    await importPhotos({ db, jobId, sourceDir: config.photoSourceDir, dataDir: config.dataDir, watermarkText: config.watermarkText });
+  if (jobId) {
+    const count = db.prepare("select count(*) count from photo where job_id=? and import_status='ready'").get(jobId).count;
+    if (!count) {
+      console.log('正在导入照片并生成预览…');
+      await importPhotos({ db, jobId, sourceDir: config.photoSourceDir, dataDir: config.dataDir, watermarkText: config.watermarkText });
+    }
   }
   const startupBackup = await backupDatabase(config.dataDir, { kind: 'startup' });
   pruneBackups(config.dataDir, 'startup', 5);
@@ -59,10 +61,11 @@ try {
     backup: options => backupDatabase(config.dataDir, options),
     prune: (kind, keep) => pruneBackups(config.dataDir, kind, keep),
   });
-  server = app.listen(config.port, '0.0.0.0', () => {
-    console.log(`电脑访问地址 http://localhost:${config.port}`);
-    console.log(`手机访问地址 http://${lanIp()}:${config.port}`);
-    console.log(`后台地址 http://localhost:${config.port}/admin`);
+  server = app.listen(config.port, config.host, () => {
+    const baseUrl = config.publicUrl || `http://${config.host}:${config.port}`;
+    console.log(`访问地址 ${baseUrl}`);
+    if (!config.publicUrl && config.host === '0.0.0.0') console.log(`手机访问地址 http://${lanIp()}:${config.port}`);
+    console.log(`后台地址 ${baseUrl}/admin`);
   });
 
   async function shutdown(signal) {
