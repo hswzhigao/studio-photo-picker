@@ -20,6 +20,7 @@ trap rollback ERR
 
 git fetch origin "$BRANCH"
 DATA_DIR="$DATA_DIR" node scripts/backup.js
+unset DATA_DIR
 git merge --ff-only "origin/$BRANCH"
 npm ci
 npm test -- --run
