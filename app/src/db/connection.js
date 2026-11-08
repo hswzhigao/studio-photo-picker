@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
+import { generateReadablePassword } from '../services/credentials.js';
 
 const migrationsDir = new URL('./migrations/', import.meta.url);
 
@@ -12,6 +12,9 @@ export function getDb(dataDir) {
     ? new Database(':memory:')
     : new Database(path.join(dataDir, 'app.sqlite'));
   db.pragma('foreign_keys = ON');
+  db.pragma('busy_timeout = 5000');
+  db.pragma('synchronous = NORMAL');
+  if (dataDir !== ':memory:') db.pragma('journal_mode = WAL');
   return db;
 }
 
@@ -19,6 +22,15 @@ function migrationFiles() {
   return fs.readdirSync(migrationsDir)
     .filter(file => /^\d+_.+\.sql$/.test(file))
     .sort();
+}
+
+export function hasPendingMigrations(db) {
+  const hasStudio = Boolean(db.prepare("select 1 from sqlite_master where type='table' and name='studio'").get());
+  if (!hasStudio) return false;
+  const hasMigrations = Boolean(db.prepare("select 1 from sqlite_master where type='table' and name='schema_migrations'").get());
+  if (!hasMigrations) return true;
+  const applied = new Set(db.prepare('select version from schema_migrations').all().map(row => row.version));
+  return migrationFiles().some(file => !applied.has(file.slice(0, 3)));
 }
 
 export function initializeDatabase(db) {
@@ -55,7 +67,7 @@ function backfillCustomers(db) {
     for (const selector of selectors) {
       const job = db.prepare('select studio_id from job where id=?').get(selector.job_id);
       if (!job) continue;
-      insert.run(job.studio_id, selector.name, selector.phone, bcrypt.hashSync(process.env.INITIAL_CUSTOMER_PASSWORD || crypto.randomBytes(18).toString('base64url'), 10), 1, now, now);
+      insert.run(job.studio_id, selector.name, selector.phone, bcrypt.hashSync(process.env.INITIAL_CUSTOMER_PASSWORD || generateReadablePassword(), 10), 1, now, now);
       update.run(lookup.get(selector.phone).id, selector.id);
     }
   });

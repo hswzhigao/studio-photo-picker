@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { union } from '../../services/selection.js';
+import { generateReadablePassword, suppliedPassword } from '../../services/credentials.js';
+import { backupDatabase, backupStats, pruneBackups } from '../../services/backup.js';
 
 export function registerAdmin(app, ctx) {
   const {
@@ -20,20 +22,33 @@ export function registerAdmin(app, ctx) {
   });
   app.post('/api/admin/change-password', requireActor('staff', { allowPasswordChange: true }), (req, res) => changePassword(req, res, 'staff'));
 
+  app.get('/api/admin/settings', requireActor('staff'), (req, res) => {
+    if (!adminOnly(req, res)) return;
+    const stats = backupStats(cfg.dataDir);
+    res.json({ settings: { data_dir: cfg.dataDir, ...stats } });
+  });
+  app.post('/api/admin/settings/backup', requireActor('staff'), async (req, res) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      const result = await backupDatabase(cfg.dataDir, { kind: 'manual' });
+      res.json({ ok: true, backup: { database_path: result.databasePath, uploads_path: result.uploadsPath, ...backupStats(cfg.dataDir) } });
+    } catch (error) {
+      return jsonError(res, 400, 'BACKUP_FAILED', error.message);
+    }
+  });
+
   app.get('/api/admin/staff', requireActor('staff'), (req, res) => {
     if (!adminOnly(req, res)) return;
     res.json({ staff: db.prepare('select id,name,phone,role,status,must_change_password from staff where studio_id=?').all(staffStudio(req.actor).studio_id) });
   });
   app.get('/api/admin/customers', requireActor('staff'), (req, res) => {
-    if (!adminOnly(req, res)) return;
     const q = String(req.query.q || '');
     res.json({ customers: db.prepare('select id,name,phone,status,must_change_password from customer where studio_id=? and (name like ? or phone like ?)').all(staffStudio(req.actor).studio_id, `%${q}%`, `%${q}%`) });
   });
   app.post('/api/admin/customers', requireActor('staff'), (req, res) => {
-    if (!adminOnly(req, res)) return;
     const name = String(req.body.name || ''), phone = String(req.body.phone || '');
     if (!name || !/^1\d{10}$/.test(phone)) return jsonError(res, 400, 'INVALID_ACCOUNT', '客户姓名和手机号无效');
-    const password = crypto.randomBytes(18).toString('base64url'), t = now();
+    const password = suppliedPassword(req.body.password) || generateReadablePassword(), t = now();
     try {
       const id = db.prepare('insert into customer(studio_id,name,phone,password_hash,must_change_password,created_by,created_at,updated_at) values(?,?,?,?,?,?,?,?)').run(staffStudio(req.actor).studio_id, name, phone, bcrypt.hashSync(password, 10), 1, req.actor.actor_id, t, t).lastInsertRowid;
       res.status(201).json({ ok: true, password, customer: { id, name, phone } });
@@ -42,7 +57,6 @@ export function registerAdmin(app, ctx) {
     }
   });
   app.patch('/api/admin/customers/:customerId', requireActor('staff'), (req, res) => {
-    if (!adminOnly(req, res)) return;
     const c = db.prepare('select * from customer where id=? and studio_id=?').get(+req.params.customerId, staffStudio(req.actor).studio_id);
     if (!c) return jsonError(res, 404, 'NOT_FOUND', '客户不存在');
     const set = ['name', 'phone', 'status'].filter(key => req.body[key] !== undefined);
@@ -50,10 +64,9 @@ export function registerAdmin(app, ctx) {
     res.json({ customer: db.prepare('select id,name,phone,status,must_change_password from customer where id=?').get(c.id) });
   });
   app.post('/api/admin/customers/:customerId/reset-password', requireActor('staff'), (req, res) => {
-    if (!adminOnly(req, res)) return;
     const c = db.prepare('select * from customer where id=? and studio_id=?').get(+req.params.customerId, staffStudio(req.actor).studio_id);
     if (!c) return jsonError(res, 404, 'NOT_FOUND', '客户不存在');
-    const password = crypto.randomBytes(18).toString('base64url');
+    const password = suppliedPassword(req.body.password) || generateReadablePassword();
     db.prepare('update customer set password_hash=?,must_change_password=1,password_version=password_version+1 where id=?').run(bcrypt.hashSync(password, 10), c.id);
     db.prepare("delete from session where actor_type='customer' and actor_id=?").run(c.id);
     res.json({ ok: true, password });
@@ -62,7 +75,7 @@ export function registerAdmin(app, ctx) {
     if (!adminOnly(req, res)) return;
     const name = String(req.body.name || ''), phone = String(req.body.phone || ''), role = String(req.body.role || 'editor');
     if (!name || !/^1\d{10}$/.test(phone)) return jsonError(res, 400, 'INVALID_ACCOUNT', '员工姓名和手机号无效');
-    const password = crypto.randomBytes(18).toString('base64url');
+    const password = suppliedPassword(req.body.password) || generateReadablePassword();
     try {
       const id = db.prepare('insert into staff(studio_id,name,phone,role,password_hash,must_change_password) values(?,?,?,?,?,1)').run(staffStudio(req.actor).studio_id, name, phone, role, bcrypt.hashSync(password, 10)).lastInsertRowid;
       res.status(201).json({ staff: { id, name, phone, role, status: 'active', must_change_password: 1 }, password });
@@ -82,7 +95,7 @@ export function registerAdmin(app, ctx) {
     if (!adminOnly(req, res)) return;
     const s = db.prepare('select * from staff where id=? and studio_id=?').get(+req.params.staffId, staffStudio(req.actor).studio_id);
     if (!s) return jsonError(res, 404, 'NOT_FOUND', '员工不存在');
-    const password = crypto.randomBytes(18).toString('base64url');
+    const password = suppliedPassword(req.body.password) || generateReadablePassword();
     db.prepare('update staff set password_hash=?,must_change_password=1,password_version=password_version+1 where id=?').run(bcrypt.hashSync(password, 10), s.id);
     res.json({ ok: true, password });
   });

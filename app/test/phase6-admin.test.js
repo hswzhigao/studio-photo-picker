@@ -42,6 +42,13 @@ describe('phase 6 admin API', () => {
     expect(allLogs.status).toBe(200); expect(allLogs.body.logs.map(log=>log.action)).toContain('POST /api/admin/customers');
   });
 
+  it('exposes backup settings only to admins', async () => {
+    const settings = await request(c.app).get('/api/admin/settings').set('Cookie', adminCookie);
+    expect(settings.status).toBe(200);
+    expect(settings.body.settings).toEqual(expect.objectContaining({ data_dir: c.root, count: 0, lastBackupAt: null }));
+    expect((await request(c.app).get('/api/admin/settings').set('Cookie', workerCookie)).status).toBe(403);
+  });
+
   it('supports package templates, draft jobs, selectors, settings and audit logs', async () => {
     const t=await request(c.app).post('/api/admin/package-templates').set('Cookie',adminCookie).send({name:'Basic',items:[{name:'Retouch',kind:'print_from_retouch',quantity:2}]});
     expect(t.status).toBe(201);
