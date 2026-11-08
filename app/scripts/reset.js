@@ -1,0 +1,1 @@
+import fs from 'node:fs';import path from 'node:path';const d=path.resolve('data');for(const n of ['app.sqlite','thumbnails','previews','uploads','zips']){const p=path.join(d,n);fs.rmSync(p,{recursive:true,force:true});}fs.mkdirSync(d,{recursive:true});console.log('已清理本地生成数据，原始照片未修改。');

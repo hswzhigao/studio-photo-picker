@@ -1,0 +1,7 @@
+import path from 'node:path';
+const deps = (ctx) => ctx;
+
+export function registerMedia(app, ctx) {
+  const { db, cfg, now, event, jobPhoto, visibleComments, visibleEvents, commentContent, requireActor, jsonError, privateHeaders, downloadHeaders, mediaHeaders, safeFile, selectorFor, packagePhotos, packageView, cleanPackages, buildPackage, issueSession, authenticate, changePassword, createComment, ownedJob, staffStudio, adminOnly, err, union, buildSummary, exportCsv, importPhotos, scanSourceDirectory } = ctx;
+   app.get('/media/:kind/:photoId.:ext?',(req,res)=>{if(!req.actor)return jsonError(res,401,'UNAUTHENTICATED','请先登录');if(!['thumbs','previews'].includes(req.params.kind)||(!req.params.ext||req.params.ext==='webp')===false)return jsonError(res,404,'NOT_FOUND','媒体不存在');const selectorIds=req.actor.actor_type==='selector'?[req.actor.actor_id]:req.actor.actor_type==='customer'?db.prepare('select id from selector where customer_id=?').all(req.actor.actor_id).map(x=>x.id):[];const allowed=selectorIds.some(selectorId=>db.prepare('select 1 from selector s join photo p on p.job_id=s.job_id where s.id=? and p.id=? and p.hidden=0').get(selectorId,+req.params.photoId));if(!allowed)return jsonError(res,404,'NOT_FOUND','媒体不存在');const mediaDir=req.params.kind==='thumbs'?'thumbnails':'previews';const file=safeFile(path.join(cfg.dataDir,mediaDir,`${req.params.photoId}.webp`),[cfg.dataDir]);if(!file)return jsonError(res,404,'NOT_FOUND','媒体不存在');mediaHeaders(res);res.sendFile(file);});
+}

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>创建选片任务</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=Noto+Serif+SC:wght@600&amp;display=swap">
+<style>
+body{margin:0;background:#F6F4F0}
+a{color:#7A4E31}a:hover{color:#5C3A24}
+button{font-family:inherit;cursor:pointer}
+input,select{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F6F4F0; color: #1D1C1A; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 14px; display: flex; flex-wrap: wrap">
+  <nav aria-label="后台导航" style="flex: 1 1 220px; max-width: 100%; background: #1D1C1A; color: #E9E4DC; padding: 24px 16px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box">
+    <div style="font-family: 'Noto Serif SC', serif; font-size: 18px; font-weight: 600; padding: 0 12px 20px; color: #fff">名人婚纱 后台</div>
+    <a href="Admin.dc.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: #E9E4DC; text-decoration: none">选片订单</a>
+    <a href="AdminSetup.dc.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: #fff; background: #34312D; text-decoration: none; font-weight: 700">新建选片任务</a>
+    <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: #E9E4DC; text-decoration: none">套餐模板</a>
+    <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: #E9E4DC; text-decoration: none">员工账号</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+      <h1 style="margin: 0; font-family: 'Noto Serif SC', serif; font-size: 26px; font-weight: 600">新建选片任务</h1>
+      <div style="display: flex; gap: 8px">
+        <button type="button" style="min-height: 44px; padding: 0 18px; border: 1px solid #CFC8BD; border-radius: 8px; background: #fff">存为草稿</button>
+        <button type="button" style="min-height: 44px; padding: 0 18px; border: none; border-radius: 8px; background: #7A4E31; color: #fff; font-weight: 700">生成链接并邀请</button>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 20px; align-items: start">
+
+      <section style="background: #fff; border: 1px solid #E6E1D9; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 700">1 · 订单与底片</h2>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #4A453E">订单名称<input value="小雅 &amp; 阿杰 · 婚纱照" style="min-height: 40px; padding: 0 12px; border: 1px solid #CFC8BD; border-radius: 8px; font-size: 14px"></label>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #4A453E">选片截止<input value="2026-11-15 18:00" style="min-height: 40px; padding: 0 12px; border: 1px solid #CFC8BD; border-radius: 8px; font-size: 14px"></label>
+        </div>
+        <div style="border: 2px dashed #CFC8BD; border-radius: 12px; padding: 28px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; background: #FBFAF8">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#7A4E31" stroke-width="1.8" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"></path></svg>
+          <div style="font-weight: 500">拖入底片文件夹，或 <a href="#">点击上传</a></div>
+          <div style="font-size: 12px; color: #6B655C">自动生成带水印的预览图，原图不对客户开放下载</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <div style="display: flex; justify-content: space-between; font-size: 13px"><span>已上传 186 / 240</span><span style="color: #6B655C">约 2 分钟</span></div>
+          <div style="height: 6px; background: #EEE9E2; border-radius: 3px; overflow: hidden"><div style="height: 6px; width: 77%; background: #7A4E31"></div></div>
+        </div>
+      </section>
+
+      <section style="background: #fff; border: 1px solid #E6E1D9; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+          <h2 style="margin: 0; font-size: 16px; font-weight: 700">2 · 套餐内容</h2>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4A453E">从模板载入
+            <select style="min-height: 36px; border: 1px solid #CFC8BD; border-radius: 8px; padding: 0 8px; background: #fff"><option>婚纱照 · 标准套餐</option><option>儿童照套餐</option><option>全家福套餐</option></select>
+          </label>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 2fr 44px; gap: 10px; font-size: 12px; color: #6B655C; padding: 0 4px"><span>产品</span><span>数量</span><span>选片规则</span><span></span></div>
+        <sc-for list="{{items}}" as="it" hint-placeholder-count="4">
+          <div style="display: grid; grid-template-columns: 2fr 1fr 2fr 44px; gap: 10px; align-items: center">
+            <input value="{{it.name}}" aria-label="产品名称" style="min-height: 40px; padding: 0 12px; border: 1px solid #CFC8BD; border-radius: 8px; font-size: 14px; min-width: 0">
+            <input value="{{it.qty}}" aria-label="数量" style="min-height: 40px; padding: 0 12px; border: 1px solid #CFC8BD; border-radius: 8px; font-size: 14px; min-width: 0">
+            <span style="font-size: 13px; color: #4A453E">{{it.rule}}</span>
+            <button type="button" aria-label="删除这一项" style="width: 44px; height: 44px; border: none; background: transparent; color: #6B655C; display: flex; align-items: center; justify-content: center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+            </button>
+          </div>
+        </sc-for>
+        <button type="button" style="align-self: flex-start; min-height: 40px; padding: 0 14px; border: 1px dashed #CFC8BD; border-radius: 8px; background: #fff; color: #7A4E31">+ 添加产品（相框 / 摆台 / 相册 / 入册…）</button>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; padding-top: 14px; border-top: 1px solid #EEE9E2">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px">超出精修时
+            <select style="min-height: 36px; border: 1px solid #CFC8BD; border-radius: 8px; padding: 0 8px; background: #fff"><option>允许，按加片价计费</option><option>不允许超选</option></select>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px">加片单价<input value="¥20 / 张" style="width: 110px; min-height: 36px; padding: 0 10px; border: 1px solid #CFC8BD; border-radius: 8px"></label>
+        </div>
+      </section>
+
+      <section style="background: #fff; border: 1px solid #E6E1D9; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px; grid-column: 1 / -1">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+          <h2 style="margin: 0; font-size: 16px; font-weight: 700">3 · 选片人与可见性</h2>
+          <button type="button" style="min-height: 40px; padding: 0 14px; border: 1px solid #CFC8BD; border-radius: 8px; background: #fff">+ 添加选片人</button>
+        </div>
+        <div style="overflow-x: auto">
+          <table style="width: 100%; border-collapse: collapse; min-width: 720px">
+            <thead>
+              <tr style="text-align: left; font-size: 12px; color: #6B655C">
+                <th style="padding: 10px 12px; font-weight: 500">姓名</th>
+                <th style="padding: 10px 12px; font-weight: 500">手机号（登录用）</th>
+                <th style="padding: 10px 12px; font-weight: 500">权限</th>
+                <th style="padding: 10px 12px; font-weight: 500">默认公开自己的选择</th>
+                <th style="padding: 10px 12px; font-weight: 500">允许本人修改公开设置</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-top: 1px solid #EEE9E2">
+                <td style="padding: 12px">小雅</td><td style="padding: 12px">138****1234</td>
+                <td style="padding: 12px"><select aria-label="小雅的权限" style="min-height: 36px; border: 1px solid #CFC8BD; border-radius: 8px; background: #fff"><option>选片 + 提交</option><option>仅选片</option><option>仅查看</option></select></td>
+                <td style="padding: 12px"><input type="checkbox" checked aria-label="小雅默认公开" style="width: 20px; height: 20px; accent-color: #7A4E31"></td>
+                <td style="padding: 12px"><input type="checkbox" checked aria-label="小雅可修改" style="width: 20px; height: 20px; accent-color: #7A4E31"></td>
+              </tr>
+              <tr style="border-top: 1px solid #EEE9E2">
+                <td style="padding: 12px">阿杰</td><td style="padding: 12px">139****5678</td>
+                <td style="padding: 12px"><select aria-label="阿杰的权限" style="min-height: 36px; border: 1px solid #CFC8BD; border-radius: 8px; background: #fff"><option>选片 + 提交</option><option>仅选片</option><option>仅查看</option></select></td>
+                <td style="padding: 12px"><input type="checkbox" checked aria-label="阿杰默认公开" style="width: 20px; height: 20px; accent-color: #7A4E31"></td>
+                <td style="padding: 12px"><input type="checkbox" checked aria-label="阿杰可修改" style="width: 20px; height: 20px; accent-color: #7A4E31"></td>
+              </tr>
+              <tr style="border-top: 1px solid #EEE9E2">
+                <td style="padding: 12px">小雅妈妈</td><td style="padding: 12px">137****9012</td>
+                <td style="padding: 12px"><select aria-label="小雅妈妈的权限" style="min-height: 36px; border: 1px solid #CFC8BD; border-radius: 8px; background: #fff"><option>仅选片</option><option>选片 + 提交</option><option>仅查看</option></select></td>
+                <td style="padding: 12px"><input type="checkbox" aria-label="小雅妈妈默认公开" style="width: 20px; height: 20px; accent-color: #7A4E31"></td>
+                <td style="padding: 12px"><input type="checkbox" checked aria-label="小雅妈妈可修改" style="width: 20px; height: 20px; accent-color: #7A4E31"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 14px 16px; background: #F1ECE5; border-radius: 10px; font-size: 13px; line-height: 1.6">
+          <span><strong>合并方式：</strong>所有人选择取并集</span>
+          <span><strong>最终提交：</strong>所有「选片 + 提交」的人都提交后生效</span>
+          <span style="color: #4A453E">影楼员工始终可以看到每个人的选择</span>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      items: [
+        { name: '精修照片', qty: '20 张', rule: '客户从底片中勾选' },
+        { name: '30寸相框', qty: '1 个', rule: '需从精修中指定 1 张' },
+        { name: '10寸摆台', qty: '1 个', rule: '需从精修中指定 1 张' },
+        { name: '相册', qty: '1 本', rule: '自动收录全部精修' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

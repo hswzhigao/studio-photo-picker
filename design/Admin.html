@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>选片进度与汇总</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&amp;family=Noto+Serif+SC:wght@600&amp;display=swap">
+<style>
+body{margin:0;background:#F6F4F0}
+a{color:#7A4E31}a:hover{color:#5C3A24}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F6F4F0; color: #1D1C1A; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 14px; display: flex; flex-wrap: wrap">
+  <nav aria-label="后台导航" style="flex: 1 1 220px; max-width: 100%; background: #1D1C1A; color: #E9E4DC; padding: 24px 16px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box">
+    <div style="font-family: 'Noto Serif SC', serif; font-size: 18px; font-weight: 600; padding: 0 12px 20px; color: #fff">名人婚纱 后台</div>
+    <a href="Admin.dc.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: #fff; background: #34312D; text-decoration: none; font-weight: 700">选片订单</a>
+    <a href="AdminSetup.dc.html" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: #E9E4DC; text-decoration: none">新建选片任务</a>
+    <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: #E9E4DC; text-decoration: none">套餐模板</a>
+    <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: #E9E4DC; text-decoration: none">员工账号</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+      <div>
+        <div style="font-size: 13px; color: #6B655C">选片订单 / 小雅 &amp; 阿杰 · 婚纱照</div>
+        <h1 style="margin: 6px 0 0; font-family: 'Noto Serif SC', serif; font-size: 26px; font-weight: 600">选片进度与汇总</h1>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap">
+        <button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #CFC8BD; border-radius: 8px; background: #fff">短信提醒未提交的人</button>
+        <button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #CFC8BD; border-radius: 8px; background: #fff">导出修图清单</button>
+        <button type="button" style="min-height: 44px; padding: 0 16px; border: none; border-radius: 8px; background: #7A4E31; color: #fff; font-weight: 700">确认并锁定选片</button>
+      </div>
+    </div>
+
+    <section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px">
+      <sc-for list="{{people}}" as="u" hint-placeholder-count="3">
+        <div style="background: #fff; border: 1px solid #E6E1D9; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="width: 32px; height: 32px; border-radius: 50%; background: {{u.color}}; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700">{{u.initial}}</span>
+            <div style="flex: 1">
+              <div style="font-weight: 700">{{u.name}}</div>
+              <div style="font-size: 12px; color: #6B655C">{{u.role}}</div>
+            </div>
+            <span style="padding: 3px 10px; border-radius: 999px; font-size: 12px; background: {{u.statusBg}}; color: {{u.statusFg}}">{{u.status}}</span>
+          </div>
+          <div style="display: flex; gap: 16px; font-size: 13px; color: #4A453E; flex-wrap: wrap">
+            <span>精修 <strong>{{u.picks}}</strong></span><span>相框 {{u.frame}}</span><span>摆台 {{u.desk}}</span>
+          </div>
+          <div style="font-size: 12px; color: #6B655C">{{u.visibility}} · 最近活动 {{u.last}}</div>
+        </div>
+      </sc-for>
+    </section>
+
+    <section style="background: #fff; border: 1px solid #E6E1D9; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: baseline; justify-content: space-between">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 700">合并结果（影楼视角 · 所有人可见）</h2>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px">
+          <span>精修 <strong style="color: #A33A1E">23 / 20</strong>（超 3 张，已接受加片 · ¥60 到店结算）</span>
+          <span>30寸相框 <strong>IMG_1021</strong></span>
+          <span>10寸摆台 <strong style="color: #A33A1E">待定</strong></span>
+        </div>
+      </div>
+      <div style="overflow-x: auto">
+        <table style="width: 100%; border-collapse: collapse; min-width: 760px; font-size: 13px">
+          <thead>
+            <tr style="text-align: left; color: #6B655C; font-size: 12px">
+              <th style="padding: 10px 12px; font-weight: 500">照片</th>
+              <th style="padding: 10px 12px; font-weight: 500">文件名</th>
+              <th style="padding: 10px 12px; font-weight: 500">小雅</th>
+              <th style="padding: 10px 12px; font-weight: 500">阿杰</th>
+              <th style="padding: 10px 12px; font-weight: 500">小雅妈妈</th>
+              <th style="padding: 10px 12px; font-weight: 500">用途</th>
+              <th style="padding: 10px 12px; font-weight: 500">客户备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+              <tr style="border-top: 1px solid #EEE9E2">
+                <td style="padding: 8px 12px"><span style="display: block; width: 44px; height: 54px; border-radius: 6px; background: {{r.tone}}"></span></td>
+                <td style="padding: 8px 12px; font-weight: 500">{{r.name}}</td>
+                <td style="padding: 8px 12px; color: #7A4E31; font-weight: 700">{{r.a}}</td>
+                <td style="padding: 8px 12px; color: #2E6460; font-weight: 700">{{r.b}}</td>
+                <td style="padding: 8px 12px; color: #5A5249; font-weight: 700">{{r.c}}</td>
+                <td style="padding: 8px 12px">{{r.use}}</td>
+                <td style="padding: 8px 12px; color: #4A453E">{{r.note}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="font-size: 12px; color: #6B655C">共 23 行 · 显示前 8 行 · <a href="#">查看全部</a></div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var tones = ['#A89F94', '#8C9A9B', '#B5A08D', '#7F8C83', '#9E8E8A', '#8E95A3', '#B2A797', '#94877A'];
+    var data = [
+      [3, '✓', '✓', '✓', '30寸相框 · 精修 · 入册', '背景路人去掉，皮肤自然一点'],
+      [8, '✓', '✓', '', '精修 · 入册', ''],
+      [14, '✓', '✓', '✓', '精修 · 入册', ''],
+      [2, '✓', '', '', '精修 · 入册', '眼睛稍微修大一点'],
+      [5, '✓', '', '✓', '精修 · 入册', ''],
+      [4, '', '✓', '', '精修 · 入册', ''],
+      [11, '', '✓', '', '精修 · 入册 · 阿杰建议摆台', ''],
+      [22, '✓', '✓', '', '精修 · 入册', '']
+    ];
+    return {
+      people: [
+        { name: '小雅', initial: '雅', color: '#7A4E31', role: '选片 + 提交', status: '选片中', statusBg: '#F1ECE5', statusFg: '#5C3A24', picks: 11, frame: 1, desk: 0, visibility: '向他人公开', last: '10分钟前' },
+        { name: '阿杰', initial: '杰', color: '#2E6460', role: '选片 + 提交', status: '已提交', statusBg: '#E7F1EF', statusFg: '#24504D', picks: 8, frame: 0, desk: 0, visibility: '向他人公开', last: '11月7日 20:14' },
+        { name: '小雅妈妈', initial: '妈', color: '#5A5249', role: '仅选片', status: '选片中', statusBg: '#F1ECE5', statusFg: '#5C3A24', picks: 4, frame: 0, desk: 0, visibility: '不公开（仅影楼可见）', last: '昨天' }
+      ],
+      rows: data.map(function (d) {
+        return { tone: tones[d[0] % tones.length], name: 'IMG_' + String(1000 + d[0] * 7), a: d[1], b: d[2], c: d[3], use: d[4], note: d[5] || '—' };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

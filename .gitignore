@@ -1,0 +1,17 @@
+# 依赖与构建产物
+node_modules/
+dist/
+
+# 数据（数据库、缩略图、上传原图、备份、打包文件）—— 含客户信息，绝不上传
+data/
+app/data/
+backups/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# 本地配置与系统文件
+.env
+.DS_Store
+验收截图/
+_to_delete/
