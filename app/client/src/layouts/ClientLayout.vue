@@ -6,6 +6,7 @@ import { api } from '../api';
 const route = useRoute();
 const router = useRouter();
 const client = reactive({ ready: false, actor: null, jobs: [], mustChange: false, error: '', toast: '', refreshJobs: null });
+provide('client', client);
 const phone = ref(''), password = ref(''), currentPassword = ref(''), newPassword = ref(''), busy = ref(false);
 const meOpen = ref(false);
 let toastTimer = null;
