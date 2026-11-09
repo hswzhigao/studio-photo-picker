@@ -1,5 +1,9 @@
 import { createRouter, createWebHistory, createMemoryHistory } from 'vue-router';
-import AppView from './views/AppView.vue';
+import ClientLayout from './layouts/ClientLayout.vue';
+import ClientHome from './views/client/ClientHome.vue';
+import ClientJob from './views/client/ClientJob.vue';
+import ClientSelected from './views/client/ClientSelected.vue';
+import ClientReview from './views/client/ClientReview.vue';
 import AdminLayout from './layouts/AdminLayout.vue';
 import JobList from './views/admin/JobList.vue';
 import JobDetail from './views/admin/JobDetail.vue';
@@ -16,9 +20,16 @@ import NewJob from './views/admin/NewJob.vue';
 import AdminSettings from './views/admin/AdminSettings.vue';
 
 export const routes = [
-  { path: '/', component: AppView },
-  { path: '/jobs/:id', component: AppView },
-  { path: '/jobs/:id/selected', component: AppView },
+  {
+    path: '/',
+    component: ClientLayout,
+    children: [
+      { path: '', component: ClientHome },
+      { path: 'jobs/:id', component: ClientJob },
+      { path: 'jobs/:id/selected', component: ClientSelected },
+      { path: 'jobs/:id/review', component: ClientReview },
+    ],
+  },
   {
     path: '/admin',
     component: AdminLayout,
@@ -44,7 +55,7 @@ export const routes = [
       },
     ],
   },
-  { path: '/:pathMatch(.*)*', component: AppView },
+  { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 
 export const router = createRouter({ history: typeof window === 'undefined' ? createMemoryHistory() : createWebHistory(), routes });

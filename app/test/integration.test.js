@@ -56,9 +56,16 @@ describe('client integration contract', () => {
     const original = await request(app).get('/api/client/jobs/1/photos/1/original').set('Cookie', token);
     expect(original.status).toBe(200);
     expect(original.body.toString()).toBe('demo-original');
-    const zip = await request(app).post('/api/client/jobs/1/originals.zip').set('Cookie', token);
-    expect(zip.status).toBe(200);
-    expect(zip.body.url).toMatch(/^\/api\/client\/jobs\/1\/downloads\//);
+    const zip = await request(app).post('/api/client/jobs/1/packages').set('Cookie', token).send({ scope: 'selected_original' });
+    expect(zip.status).toBe(202);
+    let packageStatus;
+    for (let i = 0; i < 100; i += 1) {
+      packageStatus = await request(app).get(`/api/client/jobs/1/packages/${zip.body.package.id}`).set('Cookie', token);
+      if (packageStatus.body.package.status === 'ready') break;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    expect(packageStatus.body.package.status).toBe('ready');
+    expect(packageStatus.body.package.file_url).toMatch(/^\/api\/client\/jobs\/1\/packages\/\d+\/file$/);
     const lockedSelection = await request(app).patch('/api/client/jobs/1/photos/1/selection').set('Cookie', token).send({ selected: true });
     expect(lockedSelection.status).toBe(409);
   });

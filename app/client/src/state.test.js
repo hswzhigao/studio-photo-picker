@@ -12,7 +12,7 @@ describe('client selection helpers', () => {
   });
   it('counts the current selector photos from the server payload', () => {
     expect(selectedPhotoCount({ quota: { selected: 2 }, photos: [{ selected: true }, { selected: false }, { selected: true }] })).toBe(2);
-    expect(selectedPhotoCount({ quota: { selected: 0 }, photos: [{ selected: true }, { selected: false }] })).toBe(1);
+    expect(selectedPhotoCount({ quota: { selected: 0 }, photos: [{ selected: true }, { selected: false }] })).toBe(0);
     expect(selectedPhotoCount({ photos: [{ selected: true }, { selected: false }] })).toBe(1);
   });
   it('accepts overage only when the client explicitly confirms it', () => {

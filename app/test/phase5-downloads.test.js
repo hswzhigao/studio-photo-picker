@@ -21,6 +21,15 @@ function setup() {
 }
 const cookie = r => r.headers['set-cookie']?.[0]?.split(';')[0];
 async function login(app, phone = '13900000001') { return cookie(await request(app).post('/api/auth/login').send({ phone, password: 'client-pass' })); }
+async function waitReadyPackage(app, jobId, packageId, token) {
+  for (let i = 0; i < 100; i += 1) {
+    const response = await request(app).get(`/api/client/jobs/${jobId}/packages/${packageId}`).set('Cookie', token);
+    if (response.body.package.status === 'ready') return response.body.package;
+    if (response.body.package.status === 'failed') throw new Error('package failed');
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  throw new Error('package timeout');
+}
 
 describe('phase 5 selected downloads and media authorization', () => {
   let ctx, token;
@@ -45,21 +54,23 @@ describe('phase 5 selected downloads and media authorization', () => {
     expect(response.status).toBe(404);
   });
 
-  it('does not let the legacy ZIP endpoint bypass selected download scope', async () => {
+  it('makes the selected scope package fail when original scope is selected and all_original is requested', async () => {
     ctx.db.prepare("update job set status='locked',allow_original_download=1,original_download_scope='selected' where id=?").run(ctx.job);
-    const response = await request(ctx.app).post(`/api/client/jobs/${ctx.job}/originals.zip`).set('Cookie', token);
+    const response = await request(ctx.app).post(`/api/client/jobs/${ctx.job}/packages`).set('Cookie', token).send({ scope: 'all_original' });
     expect(response.status).toBe(403);
   });
 
-  it('uses the selected scope for the legacy ZIP endpoint after a selection', async () => {
+  it('creates and downloads a selected original package with RFC 5987 filename', async () => {
     await request(ctx.app).patch(`/api/client/jobs/${ctx.job}/photos/${ctx.photo}/selection`).set('Cookie', token).send({ selected: true });
     ctx.db.prepare("update job set status='locked',allow_original_download=1,original_download_scope='selected' where id=?").run(ctx.job);
-    const response = await request(ctx.app).post(`/api/client/jobs/${ctx.job}/originals.zip`).set('Cookie', token);
-    expect(response.status).toBe(200);
-    expect(response.body.url).toMatch(/\/downloads\/job-1-[a-f0-9]{16}\.zip$/);
-    const file=await request(ctx.app).get(response.body.url).set('Cookie',token);
+    const created = await request(ctx.app).post(`/api/client/jobs/${ctx.job}/packages`).set('Cookie', token).send({ scope: 'selected_original' });
+    expect(created.status).toBe(202);
+    const ready = await waitReadyPackage(ctx.app, ctx.job, created.body.package.id, token);
+    expect(ready.file_url).toMatch(/\/packages\/\d+\/file$/);
+    const file = await request(ctx.app).get(ready.file_url).set('Cookie', token);
     expect(file.status).toBe(200);
     expect(file.headers['content-disposition']).toContain('filename*=UTF-8');
+    expect(file.headers['content-disposition']).toContain('%E5%90%8D%E4%BA%BA%E5%A9%9A%E7%BA%B1');
   });
 
   it('rejects a symlink that resolves outside the configured photo root', async () => {
@@ -88,20 +99,19 @@ describe('phase 5 selected downloads and media authorization', () => {
   it('fails closed for unknown original download scope', async () => {
     ctx.db.prepare("update job set status='locked',allow_original_download=1,original_download_scope='mystery' where id=?").run(ctx.job);
     expect((await request(ctx.app).get(`/api/client/jobs/${ctx.job}/photos/${ctx.photo}/original`).set('Cookie', token)).status).toBe(403);
-    expect((await request(ctx.app).post(`/api/client/jobs/${ctx.job}/originals.zip`).set('Cookie', token)).status).toBe(403);
     expect((await request(ctx.app).post(`/api/client/jobs/${ctx.job}/packages`).set('Cookie', token).send({ scope: 'all_original' })).status).toBe(403);
   });
 
-  it('does not allow a legacy ZIP link to cross selector ownership', async () => {
+  it('does not allow another selector to download a package', async () => {
     await request(ctx.app).patch(`/api/client/jobs/${ctx.job}/photos/${ctx.photo}/selection`).set('Cookie', token).send({ selected: true });
     ctx.db.prepare("update job set status='locked',allow_original_download=1,original_download_scope='selected' where id=?").run(ctx.job);
-    const created = await request(ctx.app).post(`/api/client/jobs/${ctx.job}/originals.zip`).set('Cookie', token);
-    expect(created.status).toBe(200);
-    const studio = ctx.db.prepare('select studio_id from job where id=?').get(ctx.job).studio_id;
-    const otherCustomer = ctx.db.prepare('insert into customer(studio_id,name,phone,password_hash,must_change_password,created_at,updated_at) values(?,?,?,?,?,?,?)').run(studio, 'Other', '13900000002', bcrypt.hashSync('client-pass', 10), 0, new Date().toISOString(), new Date().toISOString()).lastInsertRowid;
+    const created = await request(ctx.app).post(`/api/client/jobs/${ctx.job}/packages`).set('Cookie', token).send({ scope: 'selected_original' });
+    expect(created.status).toBe(202);
+    const ready = await waitReadyPackage(ctx.app, ctx.job, created.body.package.id, token);
+    const otherCustomer = ctx.db.prepare('insert into customer(studio_id,name,phone,password_hash,must_change_password,created_at,updated_at) values(?,?,?,?,?,?,?)').run(ctx.db.prepare('select studio_id from job where id=?').get(ctx.job).studio_id, 'Other', '13900000002', bcrypt.hashSync('client-pass', 10), 0, new Date().toISOString(), new Date().toISOString()).lastInsertRowid;
     ctx.db.prepare('insert into selector(job_id,customer_id,name,phone,permission) values(?,?,?,?,?)').run(ctx.job, otherCustomer, 'Other', '13900000002', 'select_submit');
     const otherToken = await login(ctx.app, '13900000002');
-    expect((await request(ctx.app).get(created.body.url).set('Cookie', otherToken)).status).toBe(404);
+    expect((await request(ctx.app).get(ready.file_url).set('Cookie', otherToken)).status).toBe(404);
   });
 
   it('does not expose an unselected original before lock and rejects unsafe original paths', async () => {

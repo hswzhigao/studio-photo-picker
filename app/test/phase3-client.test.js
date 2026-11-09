@@ -46,8 +46,8 @@ describe('phase 3 client job workflow', () => {
     expect((await request(ctx.app).patch(`/api/client/jobs/${ctx.job1}/photos/${ctx.photo}/note`).set('Cookie',token).send({content:'x'})).status).toBe(409);
     ctx.db.prepare("update job set status='submitted' where id=?").run(ctx.job1);
     expect((await request(ctx.app).post(`/api/client/jobs/${ctx.job1}/withdraw`).set('Cookie',token)).status).toBe(200);
-    const review=await request(ctx.app).post(`/api/client/jobs/${ctx.job1}/review`).set('Cookie',token).send({rating:5,content:'great'});
-    expect(review.status).toBe(201); expect(review.body.review.rating).toBe(5);
+    const review=await request(ctx.app).get(`/api/client/jobs/${ctx.job1}/review`).set('Cookie',token);
+    expect(review.status).toBe(200); expect(review.body).toHaveProperty('quota'); expect(review.body).toHaveProperty('products');
   });
 
   it('returns a read-only review summary and hides private selection counts', async () => {

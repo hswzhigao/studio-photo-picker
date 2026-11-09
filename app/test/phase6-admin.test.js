@@ -107,6 +107,7 @@ describe('phase 6 admin API', () => {
     const template = await request(c.app).post('/api/admin/package-templates').set('Cookie',adminCookie).send({name:'T2',items:[]});
     expect((await request(c.app).patch(`/api/admin/package-templates/${template.body.template.id}`).set('Cookie',adminCookie).send({name:'T3'})).status).toBe(200);
     expect((await request(c.app).delete(`/api/admin/package-templates/${template.body.template.id}`).set('Cookie',adminCookie)).status).toBe(200);
+    c.db.prepare("update job set status='draft' where id=?").run(c.job);
     expect((await request(c.app).patch(`/api/admin/jobs/${c.job}/publish`).set('Cookie',adminCookie)).status).toBe(200);
     expect(c.db.prepare('select count(*) count from notification where job_id=?').get(c.job).count).toBeGreaterThan(0);
     expect(c.db.prepare('select count(*) count from change_event where job_id=?').get(c.job).count).toBeGreaterThan(0);
@@ -145,6 +146,7 @@ describe('phase 6 admin API', () => {
     await call('post', `/api/admin/jobs/${c.job}/photos/${photo}/comments`, {content:'审计评论', password:'do-not-log', token:'comment-token'});
     const source = path.join(c.root,'audit-source'); fs.mkdirSync(source);
     await call('post', `/api/admin/jobs/${c.job}/imports`, {source:'audit-source', token:'import-token'});
+    c.db.prepare("update job set status='draft' where id=?").run(c.job);
     await call('patch', `/api/admin/jobs/${c.job}/publish`, {token:'publish-token'});
     await call('post', `/api/admin/jobs/${c.job}/lock`, {token:'lock-token'});
     await call('post', `/api/admin/jobs/${c.job}/remind`, {token:'remind-token'});
@@ -160,6 +162,7 @@ describe('phase 6 admin API', () => {
   it('supports submit/withdraw, reminders, settlement, reopen reason and CSV BOM', async () => {
     expect((await request(c.app).post(`/api/admin/jobs/${c.job}/remind`).set('Cookie',adminCookie)).status).toBe(200);
     expect((await request(c.app).post(`/api/admin/jobs/${c.job}/settle`).set('Cookie',adminCookie)).status).toBe(200);
+    c.db.prepare("update job set status='locked' where id=?").run(c.job);
     const reopened=await request(c.app).post(`/api/admin/jobs/${c.job}/reopen`).set('Cookie',adminCookie).send({reason:'客户需修改'});
     expect(reopened.status).toBe(200);
     const clientCookie=cookie(await request(c.app).post('/api/auth/login').send({phone:'13900000001',password:'client-pass'}));

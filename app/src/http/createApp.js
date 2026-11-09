@@ -63,11 +63,41 @@ export function createApp({db,cfg}){
  const safeFile=(file, roots)=>{try{const resolved=fs.realpathSync(file);return roots.some(root=>{const base=fs.realpathSync(root);const relative=path.relative(base,resolved);return relative===''||(!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative))})&&fs.statSync(resolved).isFile()?resolved:null}catch{return null}};
  const selectorFor=(jobId,actor)=>actor.actor_type==='selector'?db.prepare('select * from selector where id=? and job_id=?').get(actor.actor_id,jobId):null;
  const visiblePhoto=(jobId,photoId,actor)=>{const photo=db.prepare(`select p.* from photo p where p.id=? and p.job_id=? and ${visiblePhotoCondition('p')}`).get(photoId,jobId);if(!photo)return null;const selector=selectorFor(jobId,actor);if(selector)return {photo,selector};if(actor.actor_type==='staff'){const staff=db.prepare('select studio_id from staff where id=?').get(actor.actor_id);const job=db.prepare('select studio_id from job where id=?').get(jobId);return staff?.studio_id===job?.studio_id?{photo}:null;}return null;};
- const packagePhotos=(jobId,selectorId,scope)=>{const base=`select distinct p.* from photo p join selection s on s.photo_id=p.id join selector u on u.id=s.selector_id where p.job_id=? and ${visiblePhotoCondition('p')}`;if(scope==='selected_preview'||scope==='selected_original')return db.prepare(base+' and (u.id=? or u.share_selection=1) order by p.sort,p.id').all(jobId,selectorId);return db.prepare(`select p.* from photo p where p.job_id=? and ${visiblePhotoCondition('p')} order by p.sort,p.id`).all(jobId);};
+ const packagePhotos=(jobId,selectorId,scope)=>{const base=`select distinct p.* from photo p join selection s on s.photo_id=p.id join selector u on u.id=s.selector_id where p.job_id=? and ${visiblePhotoCondition('p')}`;const job=db.prepare('select status from job where id=?').get(jobId);if(scope==='selected_preview'||scope==='selected_original'){if(['locked','retouching','delivered'].includes(job?.status))return db.prepare(base+' order by p.sort,p.id').all(jobId);return db.prepare(base+' and (u.id=? or u.share_selection=1) order by p.sort,p.id').all(jobId,selectorId);}return db.prepare(`select p.* from photo p where p.job_id=? and ${visiblePhotoCondition('p')} order by p.sort,p.id`).all(jobId);};
  const packageView=p=>{const {file_key,...publicPackage}=p;return {...publicPackage,file_url:p.status==='ready'?`/api/client/jobs/${p.job_id}/packages/${p.id}/file`:null};};
  const cleanPackages=()=>{const expired=db.prepare("select id,file_key from download_package where expires_at is not null and expires_at<=?").all(now());for(const p of expired){if(p.file_key){const f=safeFile(p.file_key,[cfg.dataDir]);if(f)try{fs.unlinkSync(f)}catch{}}db.prepare('delete from download_package where id=?').run(p.id);}};
  const packageTimer=setInterval(cleanPackages,3600000); packageTimer.unref(); cleanPackages();
- const buildPackage=({id,jobId,selectorId,scope,photos,file})=>trackTask(new Promise(resolve=>{let settled=false;const finish=()=>{if(!settled){settled=true;resolve();}};const fail=()=>{try{db.prepare("update download_package set status='failed',error=? where id=?").run('ZIP_FAILED',id)}finally{finish()}};try{const output=fs.createWriteStream(file),archive=archiver('zip',{store:true});archive.pipe(output);photos.forEach(photo=>{const source=safeFile(photo.original_key,[cfg.photoSourceDir,cfg.dataDir]);const preview=safeFile(path.join(cfg.dataDir,'previews',`${photo.id}.webp`),[cfg.dataDir]);const input=scope==='selected_preview'?preview:source;if(input)archive.file(input,{name:scope==='selected_preview'?`${photo.id}.webp`:photo.filename});});archive.on('error',fail);output.on('error',fail);output.on('close',()=>{try{db.prepare("update download_package set status='ready',progress=total,file_key=? where id=?").run(file,id)}catch{fail();return}finish()});archive.finalize();}catch{fail()}}));
+ const buildPackage=({id,jobId,selectorId,scope,photos,file})=>trackTask(new Promise(resolve=>{
+   let settled=false;
+   const finish=()=>{if(!settled){settled=true;resolve();}};
+   const fail=(code='ZIP_FAILED')=>{if(settled)return;settled=true;try{db.prepare("update download_package set status='failed',error=? where id=?").run(code,id)}catch{}try{fs.rmSync(file,{force:true})}catch{}resolve();};
+   try{
+     const output=fs.createWriteStream(file),archive=archiver('zip',{store:true});
+     let progress=0,missing=0;
+     archive.pipe(output);
+     photos.forEach(photo=>{
+       const source=safeFile(photo.original_key,[cfg.photoSourceDir,cfg.dataDir]);
+       const preview=safeFile(path.join(cfg.dataDir,'previews',`${photo.id}.webp`),[cfg.dataDir]);
+       const input=scope==='selected_preview'?preview:source;
+       if(!input){missing+=1;}else{
+         const originalStem=path.basename(photo.filename||`photo-${photo.id}`,path.extname(photo.filename||''));
+         const name=scope==='selected_preview'?`${originalStem}.webp`:(photo.filename||`photo-${photo.id}`);
+         archive.file(input,{name});
+       }
+       progress+=1;
+       try{db.prepare('update download_package set progress=?,total=?,missing=? where id=?').run(progress,photos.length,missing,id)}catch{}
+     });
+     archive.on('error',()=>fail('ZIP_FAILED'));
+     output.on('error',()=>fail('ZIP_FAILED'));
+     output.on('close',()=>{
+       if(settled)return;
+       settled=true;
+       try{db.prepare("update download_package set status='ready',progress=total,missing=?,error=?,file_key=? where id=?").run(missing,missing?`MISSING_FILES:${missing}`:null,file,id)}catch{}
+       resolve();
+     });
+     archive.finalize();
+   }catch{fail();}
+ }));
  app.locals.stopBackgroundTasks=()=>{clearInterval(packageTimer);clearInterval(purgeTimer);photoQueue.stop();}; app.locals.waitForTasks=async (timeoutMs=10000)=>{await Promise.all([waitForTasks(timeoutMs),photoQueue.waitForIdle(timeoutMs)]);};
  const issueSession=(res,type,id,passwordVersion)=>{const token=crypto.randomBytes(32).toString('hex');db.prepare('insert into session(token,actor_type,actor_id,password_version,created_at,expires_at) values(?,?,?,?,?,?)').run(token,type,id,passwordVersion,new Date().toISOString(),new Date(Date.now()+7*86400000).toISOString());res.cookie('session',token,{httpOnly:true,sameSite:'lax',secure:Boolean(cfg.cookieSecure),maxAge:7*86400000});};
  const authenticate=(table,phone,password)=>{const account=db.prepare(`select * from ${table} where phone=?`).get(phone);if(!account)return {error:'INVALID_LOGIN'};if(account.status!=='active')return {error:'ACCOUNT_DISABLED'};if(account.locked_until&&account.locked_until>new Date().toISOString())return {error:'ACCOUNT_LOCKED'};if(!bcrypt.compareSync(password,account.password_hash)){const attempts=account.failed_attempts+1;db.prepare(`update ${table} set failed_attempts=?,locked_until=? where id=?`).run(attempts,attempts>=5?new Date(Date.now()+15*60000).toISOString():null,account.id);return {error:attempts>=5?'ACCOUNT_LOCKED':'INVALID_LOGIN'};}db.prepare(`update ${table} set failed_attempts=0,locked_until=null,last_login_at=? where id=?`).run(new Date().toISOString(),account.id);return {account};};
