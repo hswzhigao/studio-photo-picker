@@ -37,8 +37,10 @@ describe('公网部署加固', () => {
     expect(response.headers['referrer-policy']).toBe('same-origin');
     expect(response.headers['x-frame-options']).toBe('DENY');
     expect(response.headers['content-security-policy']).toContain("default-src 'self'");
-    expect(response.headers['content-security-policy']).toContain('https://fonts.googleapis.com');
-    expect(response.headers['content-security-policy']).toContain('https://fonts.gstatic.com');
+    // v6 起字体自托管于 /fonts/，CSP 不再放行 Google Fonts 域名
+    expect(response.headers['content-security-policy']).toContain("font-src 'self'");
+    expect(response.headers['content-security-policy']).not.toContain('fonts.googleapis.com');
+    expect(response.headers['content-security-policy']).not.toContain('fonts.gstatic.com');
   });
 
   it('rejects the eleventh login request from one IP within the window', async () => {

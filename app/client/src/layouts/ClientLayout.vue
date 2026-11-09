@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, provide, reactive, ref } from 'vue';
+import { computed, onMounted, provide, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '../api';
 
@@ -7,6 +7,7 @@ const route = useRoute();
 const router = useRouter();
 const client = reactive({ ready: false, actor: null, jobs: [], mustChange: false, error: '', toast: '', refreshJobs: null });
 provide('client', client);
+const currentJobId = computed(() => Number(route.params.id) || client.jobs[0]?.id || 0);
 const phone = ref(''), password = ref(''), currentPassword = ref(''), newPassword = ref(''), busy = ref(false), showPassword = ref(false);
 const meOpen = ref(false);
 let toastTimer = null;
@@ -77,37 +78,49 @@ onMounted(loadSession);
   <div class="client-shell">
     <div v-if="!client.ready" class="loading">正在加载…</div>
     <div v-else-if="!client.actor" class="login-wrap">
-      <div class="login-card">
-        <div class="brand">名人婚纱</div>
-        <p class="eyebrow">ONLINE PHOTO SELECTION</p>
-        <h1>选出属于你们的<br><em>精彩瞬间</em></h1>
-        <p class="muted">从底片中选出精修照片，与家人一起完成最终选择。</p>
-        <label>手机号<input v-model="phone" inputmode="tel" /></label>
-        <label for="client-login-password">密码</label><div class="password-row"><input id="client-login-password" v-model="password" :type="showPassword ? 'text' : 'password'" @keyup.enter="login" /><button type="button" class="password-toggle" @click="showPassword = !showPassword">{{ showPassword ? '隐藏' : '显示' }}</button></div>
-        <button class="button primary full" :disabled="busy" @click="login">进入选片</button>
-        <div v-if="client.error" class="alert danger">{{ client.error }}</div>
+      <div class="login-side"></div>
+      <div class="login-panel">
+        <div class="login-card">
+          <div class="login-brand">
+            <span class="brand">名人婚纱</span>
+            <span class="brand-sub">MINGREN BRIDAL STUDIO</span>
+            <div class="brand-rule"></div>
+            <h1>在线选片</h1>
+            <p class="muted">与家人一起，挑选属于你们的珍贵瞬间。</p>
+          </div>
+          <label>手机号<input v-model="phone" inputmode="tel" /></label>
+          <label for="client-login-password">密码</label><div class="password-row"><input id="client-login-password" v-model="password" :type="showPassword ? 'text' : 'password'" @keyup.enter="login" /><button type="button" class="password-toggle" @click="showPassword = !showPassword">{{ showPassword ? '隐藏' : '显示' }}</button></div>
+          <button class="button primary full" :disabled="busy" @click="login">进入选片</button>
+          <div v-if="client.error" class="alert danger">{{ client.error }}</div>
+          <p class="hint">忘记密码请联系影楼重置</p>
+        </div>
       </div>
     </div>
     <div v-else-if="client.mustChange" class="login-wrap">
-      <div class="login-card">
-        <h1>首次登录请修改密码</h1>
-        <label>当前密码<input v-model="currentPassword" type="password" /></label>
-        <label>新密码</label><div class="password-row"><input v-model="newPassword" :type="showPassword ? 'text' : 'password'" /><button type="button" class="password-toggle" @click="showPassword = !showPassword">{{ showPassword ? '隐藏' : '显示' }}</button></div>
-        <button class="button primary full" :disabled="busy" @click="changePassword">保存新密码</button>
-        <div v-if="client.error" class="alert danger">{{ client.error }}</div>
+      <div class="login-side"></div>
+      <div class="login-panel">
+        <div class="login-card">
+          <h1>首次登录请修改密码</h1>
+          <label>当前密码<input v-model="currentPassword" type="password" /></label>
+          <label>新密码</label><div class="password-row"><input v-model="newPassword" :type="showPassword ? 'text' : 'password'" /><button type="button" class="password-toggle" @click="showPassword = !showPassword">{{ showPassword ? '隐藏' : '显示' }}</button></div>
+          <button class="button primary full" :disabled="busy" @click="changePassword">保存新密码</button>
+          <div v-if="client.error" class="alert danger">{{ client.error }}</div>
+        </div>
       </div>
     </div>
     <template v-else>
       <header class="client-header client-topbar">
         <div class="client-topbar-left">
-          <div class="brand">名人婚纱</div>
-          <nav v-if="client.jobs.length" class="job-nav">
-            <router-link v-for="job in client.jobs" :key="job.id" :to="`/jobs/${job.id}`" class="button ghost">{{ job.title }}</router-link>
+          <span class="brand">名人婚纱 <small>MINGREN BRIDAL STUDIO</small></span>
+          <nav v-if="client.jobs.length > 1" class="job-nav">
+            <router-link v-for="job in client.jobs" :key="job.id" :to="`/jobs/${job.id}`" class="button ghost plain">{{ job.title }}</router-link>
           </nav>
         </div>
-        <div class="actions">
-          <button class="button ghost" @click="openMe">我的</button>
-        </div>
+        <nav class="topbar-nav">
+          <router-link v-if="currentJobId" :to="`/jobs/${currentJobId}`" :class="{ active: route.path === `/jobs/${currentJobId}` }">选片</router-link>
+          <router-link v-if="currentJobId" :to="`/jobs/${currentJobId}/selected`" :class="{ active: route.path === `/jobs/${currentJobId}/selected` }">我的选片</router-link>
+          <button type="button" @click="openMe">我的</button>
+        </nav>
       </header>
       <div v-if="client.error" class="alert danger">{{ client.error }}</div>
       <router-view v-if="client.jobs.length || route.path === '/'" />

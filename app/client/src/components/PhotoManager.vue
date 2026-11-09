@@ -446,7 +446,7 @@ onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); wi
         <span v-if="counts.failed" class="danger-text">失败 {{ counts.failed }}</span>
       </div>
       <div class="actions">
-        <button class="button primary" type="button" @click="pickPhotos">上传照片</button>
+        <button class="button accent" type="button" @click="pickPhotos">上传照片</button>
         <button class="button ghost" type="button" @click="pickFolder">选择文件夹</button>
       </div>
     </header>

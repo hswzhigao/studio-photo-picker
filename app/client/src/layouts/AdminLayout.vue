@@ -53,7 +53,7 @@ onMounted(load);
     <button v-if="admin.actor" class="admin-menu-toggle" aria-label="打开后台菜单" @click="navOpen = true">☰ 菜单</button>
     <div v-if="navOpen" class="admin-nav-backdrop" @click="navOpen = false"></div>
     <aside v-if="admin.actor" class="admin-nav" :class="{ open: navOpen }">
-      <div class="brand light">名人婚纱 <small>后台</small></div>
+      <div class="brand light">名人婚纱 <small>STUDIO</small></div>
       <router-link to="/admin" exact-active-class="active">选片订单</router-link>
       <router-link to="/admin/new-job" active-class="active">新建选片任务</router-link>
       <router-link to="/admin/customers" active-class="active">客户账号</router-link>

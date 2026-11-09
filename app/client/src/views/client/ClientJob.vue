@@ -219,7 +219,7 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
     <div v-if="loading" class="loading">正在准备照片…</div>
     <template v-else-if="job">
       <div class="client-job-head">
-        <div><h1>{{ job.title }}</h1><p class="muted">{{ deadlineText }}</p></div>
+        <div><p class="eyebrow">PHOTO SELECTION</p><h1>{{ job.title }}</h1><p class="muted">{{ deadlineText }}</p></div>
         <div class="status-bar" :class="{ locked: !canEdit, submitted: job.status === 'submitted' }">{{ statusText }}</div>
       </div>
       <div class="mobile-quota">
@@ -228,18 +228,18 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
       </div>
       <main class="workspace">
         <aside class="quota-panel">
-          <p class="eyebrow">套餐额度</p>
+          <p class="eyebrow">YOUR PACKAGE</p>
           <div class="quota-big" :class="{ over: quota.over }">{{ quota.count }} <span>/ {{ quota.quota }}</span></div>
           <div class="progress"><i :style="{ width: Math.min(100, quota.count / Math.max(1, quota.quota) * 100) + '%' }"></i></div>
           <p class="muted">精修照片 <b>{{ quota.quota }} 张</b></p>
           <div v-if="quota.over" class="overage">已超出 {{ quota.over }} 张<br>加片 ¥{{ quota.amount }}，到店结算</div>
           <div v-for="item in productItems" :key="item.id" class="product-quota"><span>{{ item.name }}</span><b>{{ productCount(item.id) }} / {{ item.quantity }}</b></div>
-          <button class="button primary full side-action" @click="goSelected">我的选片</button>
           <button v-if="me?.permission === 'select_submit'" class="button dark full side-action" @click="goReview">查看并提交</button>
+          <button class="button ghost full side-action" @click="goSelected">我的选片</button>
           <div class="side-rule"></div>
-          <p class="eyebrow">一起选片</p>
+          <p class="eyebrow">TOGETHER</p>
           <div v-for="person in (job.selectors || [])" :key="person.id" class="selector-row">
-            <span class="avatar small" :style="{ background: `hsl(${(person.id * 67) % 360} 48% 42%)` }">{{ person.name?.slice(0, 1) }}</span>
+            <span class="avatar small" :class="{ me: person.id === me?.id }">{{ person.name?.slice(0, 1) }}</span>
             <span>{{ person.name }}<small>{{ person.id === me?.id ? '我' : (person.share_selection ? '已公开' : '未公开') }}</small></span>
             <b>{{ person.selectionCount ?? '—' }}</b>
           </div>
@@ -257,18 +257,17 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
               <div class="photo-image" @click="openPhoto(photo)">
                 <img :src="photo.thumb_url" :alt="photo.display_name || photo.filename" loading="lazy" />
                 <button class="check" :aria-label="photo.selected ? '取消精修' : '选为精修'" :disabled="!canEdit" @click.stop="toggle(photo)">{{ photo.selected ? '✓' : '' }}</button>
-                <span v-if="photo.others?.length" class="partner">{{ photo.others[0].name }}也选了</span>
-                <span v-if="photo.comment_count" class="card-comment">{{ photo.comment_count }}<i v-if="photo.unread_comment_count" class="red-dot"></i></span>
+                <span v-if="photo.slot === 'frame' || photo.slot === 'desk'" class="tags"><span>{{ photo.slot === 'frame' ? '30寸相框' : '10寸摆台' }}</span></span>
+                <span class="photo-no-overlay">{{ photoNumber(photo) }}</span>
               </div>
-              <div class="photo-footer"><span>第 {{ photoNumber(photo) }} 张</span><button class="card-more" type="button" @click.stop="openPhoto(photo)">···</button></div>
+              <div class="photo-footer"><span>No. {{ photoNumber(photo) }}</span><span class="footer-tags"><span v-if="photo.others?.length" class="partner">{{ photo.others[0].name }}也选了</span><span v-if="photo.comment_count" class="card-comment">{{ photo.comment_count }}<i v-if="photo.unread_comment_count" class="red-dot"></i></span></span><button class="card-more" type="button" @click.stop="openPhoto(photo)">···</button></div>
             </article>
           </div>
         </section>
       </main>
       <footer class="mobile-submit">
-        <span>选择会自动保存<br><small>{{ canEdit ? '截止前可修改' : statusText }}</small></span>
-        <button class="button dark" @click="goReview">{{ me?.permission === 'select_submit' ? '查看并提交' : '查看我的选片' }}</button>
         <button class="button ghost" @click="goSelected">我的选片</button>
+        <button class="button dark" @click="goReview">{{ me?.permission === 'select_submit' ? '查看并提交' : '查看我的选片' }}</button>
       </footer>
     </template>
 
@@ -285,7 +284,7 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
           <button :class="{ active: tab === 'notes' }" @click="tab = 'notes'">我的备注</button>
         </div>
         <div v-if="tab === 'selection'" class="lightbox-panel">
-          <button class="button primary full" :disabled="!canEdit" @click="toggle(lightbox)">{{ lightbox.selected ? '✓ 已选为精修' : '选为精修' }}</button>
+          <button :class="['button', 'full', lightbox.selected ? 'accent' : 'dark']" :disabled="!canEdit" @click="toggle(lightbox)">{{ lightbox.selected ? '✓ 已选为精修' : '选为精修' }}</button>
           <div class="slot-actions"><button v-for="item in productItems" :key="item.id" :class="{ on: hasProduct(lightbox, item) }" :disabled="!canEdit" @click="setProduct(lightbox, item)">{{ item.name }}</button></div>
           <p v-if="lightbox.others?.length" class="muted">其他人也选了：{{ lightbox.others.map(person => person.name).join('、') }}</p>
           <p class="muted">{{ deadlineText }}</p>
@@ -308,6 +307,7 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
             </article>
           </article>
           <div class="reply-box">
+            <p class="reply-note">LEAVE A NOTE</p>
             <p v-if="replyTo" class="muted">回复评论 #{{ replyTo }} <button class="link-button" @click="replyTo = null">取消</button></p>
             <textarea v-model="commentText" rows="3" placeholder="写评论…" :disabled="['locked','retouching','delivered'].includes(job?.status)"></textarea>
             <label v-if="!replyTo" class="inline-check"><input v-model="commentVisibility" type="checkbox" true-value="studio_only" false-value="all" /> 仅影楼可见</label>
@@ -316,7 +316,7 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
           </div>
         </div>
         <div v-else class="lightbox-panel">
-          <p class="eyebrow">给修图师的备注</p>
+          <p class="eyebrow">LEAVE A NOTE</p>
           <textarea v-model="note" rows="5" placeholder="例如：背景路人去掉，皮肤自然一点"></textarea>
           <button class="button ghost full" :disabled="!canEdit" @click="saveNote">保存备注</button>
         </div>
