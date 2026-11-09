@@ -187,20 +187,28 @@ export function registerAdmin(app, ctx) {
   app.patch('/api/admin/package-templates/:templateId', requireActor('staff'), (req, res) => {
     const s = staffStudio(req.actor), template = db.prepare('select * from package_template where id=? and studio_id=?').get(+req.params.templateId, s.studio_id);
     if (!template) return jsonError(res, 404, 'NOT_FOUND', '模板不存在');
-    if (req.body.name !== undefined) db.prepare('update package_template set name=? where id=?').run(String(req.body.name), template.id);
+    withMutation({ jobId: null, actor: req.actor, action: 'template.update', payload: { template_id: template.id, name: String(req.body.name || template.name) } }, () => {
+      if (req.body.name !== undefined) db.prepare('update package_template set name=? where id=?').run(String(req.body.name), template.id);
+    });
     res.json({ template: db.prepare('select * from package_template where id=?').get(template.id) });
   });
   app.delete('/api/admin/package-templates/:templateId', requireActor('staff'), (req, res) => {
     const s = staffStudio(req.actor), template = db.prepare('select * from package_template where id=? and studio_id=?').get(+req.params.templateId, s.studio_id);
     if (!template) return jsonError(res, 404, 'NOT_FOUND', '模板不存在');
-    db.prepare('delete from package_template_item where template_id=?').run(template.id);
-    db.prepare('delete from package_template where id=?').run(template.id);
+    withMutation({ jobId: null, actor: req.actor, action: 'template.delete', payload: { template_id: template.id, name: template.name } }, () => {
+      db.prepare('delete from package_template_item where template_id=?').run(template.id);
+      db.prepare('delete from package_template where id=?').run(template.id);
+    });
     res.json({ ok: true });
   });
   app.post('/api/admin/package-templates', requireActor('staff'), (req, res) => {
-    const id = db.prepare('insert into package_template(studio_id,name) values(?,?)').run(staffStudio(req.actor).studio_id, String(req.body.name || '套餐')).lastInsertRowid;
-    (req.body.items || []).forEach((item, index) => db.prepare('insert into package_template_item(template_id,name,kind,quantity,sort) values(?,?,?,?,?)').run(id, String(item.name || ''), String(item.kind || 'retouch'), Number(item.quantity) || 0, index));
-    res.status(201).json({ template: { id, name: String(req.body.name || '套餐'), items: db.prepare('select * from package_template_item where template_id=?').all(id) } });
+    const name = String(req.body.name || '套餐');
+    const id = withMutation({ jobId: null, actor: req.actor, action: 'template.create', payload: { name } }, () => {
+      const templateId = db.prepare('insert into package_template(studio_id,name) values(?,?)').run(staffStudio(req.actor).studio_id, name).lastInsertRowid;
+      (req.body.items || []).forEach((item, index) => db.prepare('insert into package_template_item(template_id,name,kind,quantity,sort) values(?,?,?,?,?)').run(templateId, String(item.name || ''), String(item.kind || 'retouch'), Number(item.quantity) || 0, index));
+      return templateId;
+    });
+    res.status(201).json({ template: { id, name, items: db.prepare('select * from package_template_item where template_id=?').all(id) } });
   });
 
   app.patch('/api/admin/jobs/:id/publish', requireActor('staff'), (req, res) => {
@@ -222,14 +230,18 @@ export function registerAdmin(app, ctx) {
     const overagePrice = req.body.overage_unit_price === undefined ? 20 : Number(req.body.overage_unit_price);
     if (!Number.isFinite(overagePrice) || overagePrice < 0) return jsonError(res, 400, 'INVALID_OVERAGE', '加片单价无效');
     const scope = ['none', 'selected', 'all'].includes(req.body.original_download_scope) ? req.body.original_download_scope : 'selected';
-    const id = db.prepare("insert into job(studio_id,title,status,deadline_at,invite_token,created_by,allow_overage,overage_unit_price,allow_preview_download,allow_original_download,original_download_scope) values(?,?,'draft',?,?,?,?,?,?,?,?)").run(s.studio_id, String(req.body.title || '任务'), deadline, crypto.randomBytes(16).toString('hex'), req.actor.actor_id, overage, overagePrice, preview, original, scope).lastInsertRowid;
-    if (Array.isArray(req.body.items) && req.body.items.length) {
-      req.body.items.forEach((item, index) => db.prepare('insert into job_item(job_id,name,kind,quantity,sort) values(?,?,?,?,?)').run(id, String(item.name || '产品'), String(item.kind || 'retouch'), Number(item.quantity) || 0, index));
-    } else if (req.body.template_id) {
-      const template = db.prepare('select id from package_template where id=? and studio_id=?').get(+req.body.template_id, s.studio_id);
-      if (!template) return jsonError(res, 404, 'NOT_FOUND', '套餐模板不存在');
-      db.prepare('insert into job_item(job_id,name,kind,quantity,sort) select ?,name,kind,quantity,sort from package_template_item where template_id=?').run(id, template.id);
-    }
+    const template = req.body.template_id ? db.prepare('select id from package_template where id=? and studio_id=?').get(+req.body.template_id, s.studio_id) : null;
+    if (req.body.template_id && !template) return jsonError(res, 404, 'NOT_FOUND', '套餐模板不存在');
+    const title = String(req.body.title || '任务');
+    const id = withMutation({ jobId: null, actor: req.actor, action: 'job.create', payload: { title } }, () => {
+      const jobId = db.prepare("insert into job(studio_id,title,status,deadline_at,invite_token,created_by,allow_overage,overage_unit_price,allow_preview_download,allow_original_download,original_download_scope) values(?,?,'draft',?,?,?,?,?,?,?,?)").run(s.studio_id, title, deadline, crypto.randomBytes(16).toString('hex'), req.actor.actor_id, overage, overagePrice, preview, original, scope).lastInsertRowid;
+      if (Array.isArray(req.body.items) && req.body.items.length) {
+        req.body.items.forEach((item, index) => db.prepare('insert into job_item(job_id,name,kind,quantity,sort) values(?,?,?,?,?)').run(jobId, String(item.name || '产品'), String(item.kind || 'retouch'), Number(item.quantity) || 0, index));
+      } else if (template) {
+        db.prepare('insert into job_item(job_id,name,kind,quantity,sort) select ?,name,kind,quantity,sort from package_template_item where template_id=?').run(jobId, template.id);
+      }
+      return jobId;
+    });
     res.status(201).json({ job: { ...db.prepare('select * from job where id=?').get(id), items: db.prepare('select * from job_item where job_id=?').all(id) } });
   });
   app.patch('/api/admin/jobs/:id', requireActor('staff'), (req, res) => {
@@ -240,7 +252,9 @@ export function registerAdmin(app, ctx) {
       if (req.body.overage_unit_price !== undefined && (!Number.isFinite(Number(req.body.overage_unit_price)) || Number(req.body.overage_unit_price) < 0)) return jsonError(res, 400, 'INVALID_OVERAGE', '加片单价无效');
       const numeric = new Set(['allow_preview_download', 'allow_original_download', 'allow_overage', 'overage_unit_price']);
       const keys = ['allow_preview_download', 'allow_original_download', 'allow_overage', 'overage_unit_price', 'original_download_scope', 'title', 'deadline_at'].filter(key => req.body[key] !== undefined);
-      if (keys.length) db.prepare(`update job set ${keys.map(key => `${key}=?`).join(',')} where id=?`).run(...keys.map(key => numeric.has(key) ? (typeof req.body[key] === 'boolean' ? Number(req.body[key]) : Number(req.body[key])) : req.body[key]), +req.params.id);
+      withMutation({ jobId: +req.params.id, actor: req.actor, action: 'job.update', payload: Object.fromEntries(keys.map(key => [key, req.body[key]])) }, () => {
+        if (keys.length) db.prepare(`update job set ${keys.map(key => `${key}=?`).join(',')} where id=?`).run(...keys.map(key => numeric.has(key) ? (typeof req.body[key] === 'boolean' ? Number(req.body[key]) : Number(req.body[key])) : req.body[key]), +req.params.id);
+      });
       res.json({ job: db.prepare('select * from job where id=?').get(+req.params.id) });
     } catch (error) {
       return jsonError(res, 400, 'INVALID_JOB', error.message);
@@ -289,13 +303,15 @@ export function registerAdmin(app, ctx) {
     const customer = req.body.customer_id === undefined ? null : db.prepare('select id,name,phone from customer where id=? and studio_id=?').get(+req.body.customer_id, job.studio_id);
     if (req.body.customer_id !== undefined && !customer) return jsonError(res, 404, 'NOT_FOUND', '客户不存在');
     try {
-      const id = db.prepare('insert into selector(job_id,customer_id,name,phone,permission,share_selection,can_change_share) values(?,?,?,?,?,?,?)').run(
+      const permission = String(req.body.permission || 'select_submit');
+      if (!['select_submit', 'select_only'].includes(permission)) return jsonError(res, 400, 'INVALID_PERMISSION', '选片权限无效');
+      const id = withMutation({ jobId: job.id, actor: req.actor, action: 'selector.create', payload: { name: String(req.body.name || customer?.name || ''), permission } }, () => db.prepare('insert into selector(job_id,customer_id,name,phone,permission,share_selection,can_change_share) values(?,?,?,?,?,?,?)').run(
         +req.params.id, customer?.id || null,
         String(req.body.name || customer?.name || ''), String(req.body.phone || customer?.phone || ''),
-        String(req.body.permission || 'select_submit'),
+        permission,
         req.body.share_selection === false ? 0 : 1,
         req.body.can_change_share === false ? 0 : 1,
-      ).lastInsertRowid;
+      ).lastInsertRowid);
       res.status(201).json({ selector: db.prepare('select * from selector where id=?').get(id) });
     } catch (error) {
       if (/UNIQUE/i.test(String(error.message))) return jsonError(res, 409, 'SELECTOR_EXISTS', '该客户已在这个订单中');
@@ -492,8 +508,11 @@ export function registerAdmin(app, ctx) {
     if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
     const selector = db.prepare('select * from selector where id=? and job_id=?').get(+req.params.selectorId, +req.params.id);
     if (!selector) return jsonError(res, 404, 'NOT_FOUND', '选片人不存在');
+    if (req.body.permission !== undefined && !['select_submit', 'select_only'].includes(String(req.body.permission))) return jsonError(res, 400, 'INVALID_PERMISSION', '选片权限无效');
     const allowed = ['name', 'permission', 'share_selection', 'can_change_share'].filter(key => req.body[key] !== undefined);
-    if (allowed.length) db.prepare(`update selector set ${allowed.map(key => `${key}=?`).join(',')} where id=?`).run(...allowed.map(key => typeof req.body[key] === 'boolean' ? Number(req.body[key]) : req.body[key]), selector.id);
+    withMutation({ jobId: +req.params.id, actor: req.actor, action: 'selector.update', eventKind: 'selector.updated', payload: { selector_id: selector.id, ...Object.fromEntries(allowed.map(key => [key, req.body[key]])) } }, () => {
+      if (allowed.length) db.prepare(`update selector set ${allowed.map(key => `${key}=?`).join(',')} where id=?`).run(...allowed.map(key => typeof req.body[key] === 'boolean' ? Number(req.body[key]) : req.body[key]), selector.id);
+    });
     res.json({ selector: db.prepare('select * from selector where id=?').get(selector.id) });
   });
   app.delete('/api/admin/jobs/:id/selectors/:selectorId', requireActor('staff'), (req, res) => {
@@ -502,11 +521,11 @@ export function registerAdmin(app, ctx) {
     if (!selector) return jsonError(res, 404, 'NOT_FOUND', '选片人不存在');
     const has = db.prepare('select 1 from selection where selector_id=? limit 1').get(selector.id);
     if (has && !req.body.confirm) return jsonError(res, 409, 'CONFIRM_REQUIRED', '该选片人已有选片，请确认移除');
-    db.prepare('delete from selection where selector_id=?').run(selector.id);
-    db.prepare('delete from slot_assignment where selector_id=?').run(selector.id);
-    db.prepare('delete from selector where id=?').run(selector.id);
-    event(job.id, 'selector.removed', req.actor, { selector_id: selector.id, name: selector.name });
-    db.prepare('insert into audit_log(job_id,actor_type,actor_id,action,payload,created_at) values(?,?,?,?,?,?)').run(job.id, 'staff', req.actor.actor_id, 'selector.remove', JSON.stringify({ selector_id: selector.id, name: selector.name }), now());
+    withMutation({ jobId: job.id, actor: req.actor, action: 'selector.remove', eventKind: 'selector.removed', payload: { selector_id: selector.id, name: selector.name } }, () => {
+      db.prepare('delete from selection where selector_id=?').run(selector.id);
+      db.prepare('delete from slot_assignment where selector_id=?').run(selector.id);
+      db.prepare('delete from selector where id=?').run(selector.id);
+    });
     res.json({ ok: true });
   });
 
@@ -579,16 +598,18 @@ export function registerAdmin(app, ctx) {
     const job = ownedJob(req.params.id, req.actor);
     if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
     const sentAt = now();
-    db.prepare("insert into notification(job_id,selector_id,kind,content,sent_at) select job_id,id,'remind','请完成选片',? from selector where job_id=? and submitted_at is null").run(sentAt, job.id);
-    db.prepare('insert into audit_log(job_id,actor_type,actor_id,action,payload,created_at) values(?,?,?,?,?,?)').run(job.id, 'staff', req.actor.actor_id, 'remind', JSON.stringify({ sent_at: sentAt }), sentAt);
+    withMutation({ jobId: job.id, actor: req.actor, action: 'remind', payload: { sent_at: sentAt } }, () => {
+      db.prepare("insert into notification(job_id,selector_id,kind,content,sent_at) select job_id,id,'remind','请完成选片',? from selector where job_id=? and submitted_at is null").run(sentAt, job.id);
+    });
     res.json({ ok: true });
   });
   app.post('/api/admin/jobs/:id/settle', requireActor('staff'), (req, res) => {
     const job = ownedJob(req.params.id, req.actor);
     if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
     const settledAt = now();
-    db.prepare('update job set overage_settled=1,updated_at=? where id=?').run(settledAt, job.id);
-    db.prepare('insert into audit_log(job_id,actor_type,actor_id,action,payload,created_at) values(?,?,?,?,?,?)').run(job.id, 'staff', req.actor.actor_id, 'settle', JSON.stringify({ settled_at: settledAt }), settledAt);
+    withMutation({ jobId: job.id, actor: req.actor, action: 'settle', payload: { settled_at: settledAt } }, () => {
+      db.prepare('update job set overage_settled=1,updated_at=? where id=?').run(settledAt, job.id);
+    });
     res.json({ ok: true, job: db.prepare('select * from job where id=?').get(job.id) });
   });
   app.post('/api/admin/jobs/:id/reopen', requireActor('staff'), (req, res) => {
