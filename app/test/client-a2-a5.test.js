@@ -74,6 +74,9 @@ describe('A2-A5 client selection, comments, review and downloads', () => {
     expect(photo.my_note).toBe('自然一点');
     expect(detail.body.quota).toEqual(expect.objectContaining({ count: 1, quota: 0, overage: 1 }));
     expect(detail.body.items.map(item => item.name)).toEqual(['30寸相框', '10寸摆台']);
+    const review = await request(c.app).get(`/api/client/jobs/${c.job}/review`).set('Cookie', token);
+    expect(review.body.products[0].final.thumb_url).toContain('/media/thumbs/');
+    expect(review.body.products[0].final.preview_url).toContain('wm=2');
   });
 
   it('shows unshared selections in the final tab only after lock', async () => {

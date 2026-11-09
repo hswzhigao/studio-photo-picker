@@ -11,7 +11,7 @@ import { buildAdminExport, adminExportView, resolveExportPhotos, sanitizeOrderNa
 
 export function registerAdmin(app, ctx) {
   const {
-    db, cfg, now, event, requireActor, jsonError, issueSession, exportCsv, loginGuard,
+    db, cfg, now, event, withMutation, requireActor, jsonError, issueSession, exportCsv, loginGuard,
     importPhotos, scanSourceDirectory, changePassword, staffStudio, ownedJob,
     adminOnly, err, authenticate, buildSummary, photoUpload, photoQueue, trackTask,
     safeFile, privateHeaders, downloadHeaders,
@@ -95,45 +95,64 @@ export function registerAdmin(app, ctx) {
     if (!name || !/^1\d{10}$/.test(phone)) return jsonError(res, 400, 'INVALID_ACCOUNT', '客户姓名和手机号无效');
     const password = suppliedPassword(req.body.password) || generateReadablePassword(), t = now();
     try {
-      const id = db.prepare('insert into customer(studio_id,name,phone,password_hash,must_change_password,created_by,created_at,updated_at) values(?,?,?,?,?,?,?,?)').run(staffStudio(req.actor).studio_id, name, phone, bcrypt.hashSync(password, 10), 1, req.actor.actor_id, t, t).lastInsertRowid;
+      const id = withMutation({ jobId: null, actor: req.actor, action: 'customer.create', payload: { name, phone } }, () => db.prepare('insert into customer(studio_id,name,phone,password_hash,must_change_password,created_by,created_at,updated_at) values(?,?,?,?,?,?,?,?)').run(staffStudio(req.actor).studio_id, name, phone, bcrypt.hashSync(password, 10), 1, req.actor.actor_id, t, t).lastInsertRowid);
       res.status(201).json({ ok: true, password, customer: { id, name, phone, url: cfg.publicUrl || undefined } });
-    } catch {
-      return jsonError(res, 409, 'ACCOUNT_EXISTS', '客户账号已存在');
+    } catch (error) {
+      if (/UNIQUE/i.test(String(error.message))) return jsonError(res, 409, 'ACCOUNT_EXISTS', '客户账号已存在');
+      throw error;
     }
   });
   app.patch('/api/admin/customers/:customerId', requireActor('staff'), (req, res) => {
     const c = db.prepare('select * from customer where id=? and studio_id=?').get(+req.params.customerId, staffStudio(req.actor).studio_id);
     if (!c) return jsonError(res, 404, 'NOT_FOUND', '客户不存在');
+    if (req.body.status !== undefined && !['active', 'disabled'].includes(String(req.body.status))) return jsonError(res, 400, 'INVALID_STATUS', '客户状态无效');
     const set = ['name', 'phone', 'status'].filter(key => req.body[key] !== undefined);
-    if (set.length) db.prepare(`update customer set ${set.map(key => `${key}=?`).join(',')},updated_at=? where id=?`).run(...set.map(key => String(req.body[key])), now(), c.id);
+    db.transaction(() => {
+      if (set.length) db.prepare(`update customer set ${set.map(key => `${key}=?`).join(',')},updated_at=? where id=?`).run(...set.map(key => String(req.body[key])), now(), c.id);
+      if (req.body.status === 'disabled') db.prepare("delete from session where actor_type='customer' and actor_id=?").run(c.id);
+    })();
     res.json({ customer: db.prepare('select id,name,phone,status,must_change_password from customer where id=?').get(c.id) });
   });
   app.post('/api/admin/customers/:customerId/reset-password', requireActor('staff'), (req, res) => {
     const c = db.prepare('select * from customer where id=? and studio_id=?').get(+req.params.customerId, staffStudio(req.actor).studio_id);
     if (!c) return jsonError(res, 404, 'NOT_FOUND', '客户不存在');
     const password = suppliedPassword(req.body.password) || generateReadablePassword();
-    db.prepare('update customer set password_hash=?,must_change_password=1,password_version=password_version+1 where id=?').run(bcrypt.hashSync(password, 10), c.id);
-    db.prepare("delete from session where actor_type='customer' and actor_id=?").run(c.id);
+    withMutation({ jobId: null, actor: req.actor, action: 'customer.reset_password', payload: { customer_id: c.id } }, () => {
+      db.prepare('update customer set password_hash=?,must_change_password=1,password_version=password_version+1 where id=?').run(bcrypt.hashSync(password, 10), c.id);
+      db.prepare("delete from session where actor_type='customer' and actor_id=?").run(c.id);
+    });
     res.json({ ok: true, password, url: cfg.publicUrl || undefined });
   });
   app.post('/api/admin/staff', requireActor('staff'), (req, res) => {
     if (!adminOnly(req, res)) return;
     const name = String(req.body.name || ''), phone = String(req.body.phone || ''), role = String(req.body.role || 'editor');
     if (!name || !/^1\d{10}$/.test(phone)) return jsonError(res, 400, 'INVALID_ACCOUNT', '员工姓名和手机号无效');
+    if (!['admin', 'editor'].includes(role)) return jsonError(res, 400, 'INVALID_ROLE', '员工角色无效');
     const password = suppliedPassword(req.body.password) || generateReadablePassword();
     try {
-      const id = db.prepare('insert into staff(studio_id,name,phone,role,password_hash,must_change_password) values(?,?,?,?,?,1)').run(staffStudio(req.actor).studio_id, name, phone, role, bcrypt.hashSync(password, 10)).lastInsertRowid;
+      const id = withMutation({ jobId: null, actor: req.actor, action: 'staff.create', payload: { name, phone, role } }, () => db.prepare('insert into staff(studio_id,name,phone,role,password_hash,must_change_password) values(?,?,?,?,?,1)').run(staffStudio(req.actor).studio_id, name, phone, role, bcrypt.hashSync(password, 10)).lastInsertRowid);
       res.status(201).json({ staff: { id, name, phone, role, status: 'active', must_change_password: 1 }, password });
-    } catch {
-      return jsonError(res, 409, 'ACCOUNT_EXISTS', '员工账号已存在');
+    } catch (error) {
+      if (/UNIQUE/i.test(String(error.message))) return jsonError(res, 409, 'ACCOUNT_EXISTS', '员工账号已存在');
+      throw error;
     }
   });
   app.patch('/api/admin/staff/:staffId', requireActor('staff'), (req, res) => {
     if (!adminOnly(req, res)) return;
     const s = db.prepare('select * from staff where id=? and studio_id=?').get(+req.params.staffId, staffStudio(req.actor).studio_id);
     if (!s) return jsonError(res, 404, 'NOT_FOUND', '员工不存在');
+    if (req.body.role !== undefined && !['admin', 'editor'].includes(String(req.body.role))) return jsonError(res, 400, 'INVALID_ROLE', '员工角色无效');
+    if (req.body.status !== undefined && !['active', 'disabled'].includes(String(req.body.status))) return jsonError(res, 400, 'INVALID_STATUS', '员工状态无效');
+    if (s.id === req.actor.actor_id && (req.body.status === 'disabled' || (req.body.role !== undefined && String(req.body.role) !== 'admin'))) return jsonError(res, 400, 'SELF_PROTECTED', '不能停用或降权当前登录的管理员');
+    if (s.role === 'admin' && ((req.body.role !== undefined && String(req.body.role) !== 'admin') || req.body.status === 'disabled')) {
+      const others = db.prepare("select count(*) count from staff where studio_id=? and id<>? and role='admin' and status='active'").get(s.studio_id, s.id).count;
+      if (!others) return jsonError(res, 400, 'LAST_ADMIN', '至少保留一个可用管理员');
+    }
     const keys = ['name', 'phone', 'role', 'status'].filter(key => req.body[key] !== undefined);
-    if (keys.length) db.prepare(`update staff set ${keys.map(key => `${key}=?`).join(',')} where id=?`).run(...keys.map(key => String(req.body[key])), s.id);
+    db.transaction(() => {
+      if (keys.length) db.prepare(`update staff set ${keys.map(key => `${key}=?`).join(',')} where id=?`).run(...keys.map(key => String(req.body[key])), s.id);
+      if (req.body.status === 'disabled' || req.body.password !== undefined) db.prepare("delete from session where actor_type='staff' and actor_id=?").run(s.id);
+    })();
     res.json({ staff: db.prepare('select id,name,phone,role,status,must_change_password from staff where id=?').get(s.id) });
   });
   app.post('/api/admin/staff/:staffId/reset-password', requireActor('staff'), (req, res) => {
@@ -141,7 +160,10 @@ export function registerAdmin(app, ctx) {
     const s = db.prepare('select * from staff where id=? and studio_id=?').get(+req.params.staffId, staffStudio(req.actor).studio_id);
     if (!s) return jsonError(res, 404, 'NOT_FOUND', '员工不存在');
     const password = suppliedPassword(req.body.password) || generateReadablePassword();
-    db.prepare('update staff set password_hash=?,must_change_password=1,password_version=password_version+1 where id=?').run(bcrypt.hashSync(password, 10), s.id);
+    withMutation({ jobId: null, actor: req.actor, action: 'staff.reset_password', payload: { staff_id: s.id } }, () => {
+      db.prepare('update staff set password_hash=?,must_change_password=1,password_version=password_version+1 where id=?').run(bcrypt.hashSync(password, 10), s.id);
+      db.prepare("delete from session where actor_type='staff' and actor_id=?").run(s.id);
+    });
     res.json({ ok: true, password, url: cfg.publicUrl || undefined });
   });
 
@@ -185,10 +207,10 @@ export function registerAdmin(app, ctx) {
     const job = ownedJob(req.params.id, req.actor);
     if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
     if (job.status !== 'draft') return jsonError(res, 409, 'INVALID_STATUS', '只有草稿订单可以发布');
-    db.prepare("update job set status='selecting' where id=?").run(job.id);
-    event(job.id, 'job.status', req.actor, { status: 'selecting' });
-    db.prepare("insert into notification(job_id,selector_id,kind,content,sent_at) select job_id,id,'publish','任务已发布',? from selector where job_id=?").run(now(), job.id);
-    db.prepare('insert into audit_log(job_id,actor_type,actor_id,action,payload,created_at) values(?,?,?,?,?,?)').run(job.id, 'staff', req.actor.actor_id, 'publish', JSON.stringify({ status: 'selecting' }), now());
+    withMutation({ jobId: job.id, actor: req.actor, action: 'publish', eventKind: 'job.status', payload: { status: 'selecting' } }, () => {
+      db.prepare("update job set status='selecting' where id=?").run(job.id);
+      db.prepare("insert into notification(job_id,selector_id,kind,content,sent_at) select job_id,id,'publish','任务已发布',? from selector where job_id=?").run(now(), job.id);
+    });
     res.json({ job: db.prepare('select * from job where id=?').get(job.id) });
   });
   app.post('/api/admin/jobs', requireActor('staff'), (req, res) => {
@@ -203,7 +225,11 @@ export function registerAdmin(app, ctx) {
     const id = db.prepare("insert into job(studio_id,title,status,deadline_at,invite_token,created_by,allow_overage,overage_unit_price,allow_preview_download,allow_original_download,original_download_scope) values(?,?,'draft',?,?,?,?,?,?,?,?)").run(s.studio_id, String(req.body.title || '任务'), deadline, crypto.randomBytes(16).toString('hex'), req.actor.actor_id, overage, overagePrice, preview, original, scope).lastInsertRowid;
     if (Array.isArray(req.body.items) && req.body.items.length) {
       req.body.items.forEach((item, index) => db.prepare('insert into job_item(job_id,name,kind,quantity,sort) values(?,?,?,?,?)').run(id, String(item.name || '产品'), String(item.kind || 'retouch'), Number(item.quantity) || 0, index));
-    } else if (req.body.template_id) db.prepare('insert into job_item(job_id,name,kind,quantity,sort) select ?,name,kind,quantity,sort from package_template_item where template_id=?').run(id, +req.body.template_id);
+    } else if (req.body.template_id) {
+      const template = db.prepare('select id from package_template where id=? and studio_id=?').get(+req.body.template_id, s.studio_id);
+      if (!template) return jsonError(res, 404, 'NOT_FOUND', '套餐模板不存在');
+      db.prepare('insert into job_item(job_id,name,kind,quantity,sort) select ?,name,kind,quantity,sort from package_template_item where template_id=?').run(id, template.id);
+    }
     res.status(201).json({ job: { ...db.prepare('select * from job where id=?').get(id), items: db.prepare('select * from job_item where job_id=?').all(id) } });
   });
   app.patch('/api/admin/jobs/:id', requireActor('staff'), (req, res) => {
@@ -508,7 +534,7 @@ export function registerAdmin(app, ctx) {
     let rootImageCount = 0;
     if (fs.existsSync(root)) {
       directories = fs.readdirSync(root, { withFileTypes: true })
-        .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+        .filter(entry => entry.isDirectory() && !entry.name.startsWith('.') && !entry.name.includes('验收'))
         .map(entry => ({ name: entry.name, image_count: scanSourceDirectory(path.join(root, entry.name)).length }))
         .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
       rootImageCount = scanSourceDirectory(root).length;
@@ -517,7 +543,9 @@ export function registerAdmin(app, ctx) {
   });
   app.post('/api/admin/jobs/:id/imports', requireActor('staff'), (req, res) => {
     if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
-    const root = path.resolve(cfg.photoSourceDir), source = path.resolve(root, String(req.body.source || ''));
+    const root = path.resolve(cfg.photoSourceDir), sourceName = String(req.body.source || '');
+    if (sourceName.split(/[\\/]/).some(part => part.includes('验收'))) return jsonError(res, 400, 'INVALID_SOURCE', '验收目录不能作为底片导入');
+    const source = path.resolve(root, sourceName);
     let realSource;
     try {
       realSource = fs.realpathSync(source);
@@ -568,9 +596,10 @@ export function registerAdmin(app, ctx) {
     if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
     if (!['locked', 'retouching', 'delivered'].includes(job.status)) return jsonError(res, 409, 'INVALID_STATUS', '当前状态不能退回修改');
     const reason = String(req.body.reason || '').trim();
-    db.prepare("update job set status='selecting',locked_at=null,locked_by=null,overage_settled=0,updated_at=? where id=?").run(now(), job.id);
-    db.prepare("insert into notification(job_id,selector_id,kind,content,sent_at) select job_id,id,'reopen',?,? from selector where job_id=?").run(reason ? `任务已退回修改：${reason}` : '任务已退回修改', now(), job.id);
-    event(job.id, 'job.status', req.actor, { status: 'selecting', reason });
+    withMutation({ jobId: job.id, actor: req.actor, action: 'reopen', eventKind: 'job.status', payload: { status: 'selecting', reason } }, () => {
+      db.prepare("update job set status='selecting',locked_at=null,locked_by=null,overage_settled=0,updated_at=? where id=?").run(now(), job.id);
+      db.prepare("insert into notification(job_id,selector_id,kind,content,sent_at) select job_id,id,'reopen',?,? from selector where job_id=?").run(reason ? `任务已退回修改：${reason}` : '任务已退回修改', now(), job.id);
+    });
     res.json({ ok: true, job: db.prepare('select * from job where id=?').get(job.id) });
   });
   app.get('/api/admin/jobs/:id/notifications', requireActor('staff'), (req, res) => {
@@ -687,9 +716,9 @@ export function registerAdmin(app, ctx) {
     if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
     if (!['selecting', 'submitted'].includes(job.status)) return jsonError(res, 409, 'INVALID_STATUS', '当前状态不能锁定');
     const jobId = job.id;
-    const changed = db.prepare("update job set status='locked',locked_at=?,locked_by=? where id=?").run(now(), req.actor.actor_id, jobId);
-    if (!changed.changes) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
-    event(jobId, 'job.status', req.actor, { status: 'locked' });
+    withMutation({ jobId, actor: req.actor, action: 'lock', eventKind: 'job.status', payload: { status: 'locked' } }, () => {
+      db.prepare("update job set status='locked',locked_at=?,locked_by=? where id=?").run(now(), req.actor.actor_id, jobId);
+    });
     res.json({ ok: true });
   });
 }

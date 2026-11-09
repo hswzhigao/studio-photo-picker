@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import sharp from 'sharp';
 
@@ -55,17 +56,22 @@ export async function readImageMetadata(file) {
   }
 }
 
-function watermarkSvg(width, height, text) {
-  const w = Math.max(1, width || 1);
-  const h = Math.max(1, Math.min(height || 1, 80));
-  const escaped = String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-  const fontSize = Math.max(18, Math.min(28, Math.round(w * 0.018)));
-  return Buffer.from(`<svg width="${w}" height="${h}"><text x="${Math.max(12, w - 24)}" y="${Math.max(fontSize, h - 24)}" text-anchor="end" font-family="Noto Sans CJK SC, Noto Sans SC, PingFang SC, Microsoft YaHei, sans-serif" font-size="${fontSize}" fill="white" fill-opacity=".86" stroke="black" stroke-opacity=".35" stroke-width="1.2">${escaped}</text></svg>`);
+const watermarkFile = fileURLToPath(new URL('../../assets/watermark.png', import.meta.url));
+
+async function watermarkOverlay(previewWidth, previewHeight) {
+  const meta = await sharp(watermarkFile).metadata();
+  let width = Math.min(247, Math.max(1, Math.round(previewWidth * 0.3)), Math.max(1, previewWidth - 2));
+  let height = Math.max(1, Math.round((meta.height / meta.width) * width));
+  if (height > Math.max(1, previewHeight - 2)) {
+    height = Math.max(1, previewHeight - 2);
+    width = Math.max(1, Math.round((meta.width / meta.height) * height));
+  }
+  return sharp(watermarkFile).resize({ width, height }).png().toBuffer();
 }
 
 export async function renderPreview(original, destination, watermarkText) {
   const base = await sharp(original).rotate().resize({ width: 1600, withoutEnlargement: true }).png().toBuffer({ resolveWithObject: true });
-  const overlay = watermarkSvg(base.info.width, base.info.height, watermarkText || '名人婚纱 · 预览');
+  const overlay = await watermarkOverlay(base.info.width, base.info.height);
   await sharp(base.data).composite([{ input: overlay, gravity: 'southeast' }]).webp({ quality: 88 }).toFile(destination);
 }
 
@@ -294,7 +300,7 @@ export function photoView(photo) {
     display_name: name,
     original_filename: photo.filename,
     thumb_url: `/media/thumbs/${photo.id}.webp?v=${version}`,
-    preview_url: `/media/previews/${photo.id}.webp?v=${version}`,
+    preview_url: `/media/previews/${photo.id}.webp?v=${version}&wm=2`,
     trash_remaining_days: photo.deleted_at ? Math.max(0, Math.ceil((Date.parse(photo.deleted_at) + TRASH_RETENTION_MS - Date.now()) / 86400000)) : null,
   };
 }

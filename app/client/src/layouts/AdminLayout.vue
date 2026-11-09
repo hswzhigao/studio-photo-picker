@@ -1,10 +1,12 @@
 <script setup>
-import { onMounted, provide, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { onMounted, provide, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { api } from '../api';
 
 const router = useRouter();
+const route = useRoute();
 const admin = reactive({ ready: false, actor: null, mustChange: false, error: '' });
+const navOpen = ref(false);
 const phone = ref(''), password = ref(''), currentPassword = ref(''), newPassword = ref(''), busy = ref(false), showPassword = ref(false);
 provide('admin', admin);
 
@@ -42,12 +44,15 @@ async function logout() {
   admin.actor = null;
   router.push('/admin');
 }
+watch(() => route.path, () => { navOpen.value = false; });
 onMounted(load);
 </script>
 
 <template>
   <div class="admin-shell">
-    <aside v-if="admin.actor" class="admin-nav">
+    <button v-if="admin.actor" class="admin-menu-toggle" aria-label="打开后台菜单" @click="navOpen = true">☰ 菜单</button>
+    <div v-if="navOpen" class="admin-nav-backdrop" @click="navOpen = false"></div>
+    <aside v-if="admin.actor" class="admin-nav" :class="{ open: navOpen }">
       <div class="brand light">名人婚纱 <small>后台</small></div>
       <router-link to="/admin" exact-active-class="active">选片订单</router-link>
       <router-link to="/admin/new-job" active-class="active">新建选片任务</router-link>

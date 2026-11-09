@@ -1,5 +1,5 @@
 <script setup>
-import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '../../api';
 import { filterPhotos } from '../../state';
@@ -9,10 +9,10 @@ const route = useRoute();
 const router = useRouter();
 const jobId = computed(() => Number(route.params.id));
 const job = ref(null), photos = ref([]), me = ref(null);
-const loading = ref(true), error = ref(''), filter = ref('all');
+const loading = ref(true), error = ref(''), filter = ref(['all','mine','unpicked','print','partner','commented'].includes(route.query.filter) ? route.query.filter : 'all');
 const lightbox = ref(null), note = ref('');
 const tab = ref('selection');
-const comments = ref([]), commentText = ref(''), commentVisibility = ref('all'), replyTo = ref(null);
+const comments = ref([]), commentText = ref(''), commentVisibility = ref('all'), replyTo = ref(null), commentsPanel = ref(null);
 const editingId = ref(null), editingText = ref('');
 const commentError = ref('');
 const toast = ref('');
@@ -43,6 +43,7 @@ const deadlineText = computed(() => {
   return `截止 ${text}（${days > 0 ? `${days} 天` : ''}${hours} 小时）`;
 });
 const shownPhotos = computed(() => filterPhotos(photos.value, filter.value));
+const photoNumber = photo => photos.value.findIndex(item => item.id === photo.id) + 1;
 const productCount = itemId => photos.value.filter(photo => (photo.slots || []).some(slot => slot.job_item_id === itemId)).length;
 const hasProduct = (photo, item) => (photo.slots || []).some(slot => slot.job_item_id === item.id);
 const topComments = computed(() => comments.value.filter(comment => !comment.parent_id));
@@ -142,6 +143,8 @@ async function loadComments() {
   try {
     const data = await api.get(`/api/client/jobs/${jobId.value}/photos/${lightbox.value.id}/comments`);
     comments.value = data.comments || [];
+    await nextTick();
+    if (commentsPanel.value) commentsPanel.value.scrollTop = commentsPanel.value.scrollHeight;
   } catch (e) { commentError.value = e.message; }
 }
 async function markCommentsRead() {
@@ -205,6 +208,7 @@ function keydown(event) {
   if (event.key === ' ') { event.preventDefault(); toggle(lightbox.value); }
 }
 watch(jobId, async () => { lastEventId = 0; await load(); startPolling(); }, { immediate: true });
+watch(() => route.query.filter, value => { if (['all','mine','unpicked','print','partner','commented'].includes(value)) filter.value = value; });
 onMounted(() => window.addEventListener('keydown', keydown));
 onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterval(pollTimer); clearTimeout(toastTimer); });
 </script>
@@ -246,23 +250,17 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
             <div class="filters">
               <button v-for="item in [['all','全部'],['mine','我已选'],['unpicked','未选'],['print','相框 / 摆台'],['partner','他人选的'],['commented','有评论']]" :key="item[0]" :class="{ selected: filter === item[0] }" @click="filter = item[0]">{{ item[1] }} <small>{{ filterPhotos(photos, item[0]).length }}</small></button>
             </div>
-            <span class="tip">点击照片看大图 · 右键上角 ✓ 选为精修</span>
+            <span class="tip">点击照片看大图 · 点右上角 ✓ 选为精修</span>
           </div>
           <div class="photo-grid">
             <article v-for="photo in shownPhotos" :key="photo.id" class="photo-card" :class="{ picked: photo.selected }">
               <div class="photo-image" @click="openPhoto(photo)">
                 <img :src="photo.thumb_url" :alt="photo.display_name || photo.filename" loading="lazy" />
                 <button class="check" :aria-label="photo.selected ? '取消精修' : '选为精修'" :disabled="!canEdit" @click.stop="toggle(photo)">{{ photo.selected ? '✓' : '' }}</button>
-                <div class="tags"><span v-for="item in productItems.filter(product => hasProduct(photo, product))" :key="item.id">{{ item.name }}</span></div>
                 <span v-if="photo.others?.length" class="partner">{{ photo.others[0].name }}也选了</span>
                 <span v-if="photo.comment_count" class="card-comment">{{ photo.comment_count }}<i v-if="photo.unread_comment_count" class="red-dot"></i></span>
               </div>
-              <div class="photo-footer">
-                <span>{{ photo.display_name || photo.filename }}</span>
-                <div>
-                  <button v-for="item in productItems" :key="item.id" :class="{ on: hasProduct(photo, item) }" :disabled="!canEdit" @click="setProduct(photo, item)">{{ item.name.replace('30寸','').replace('10寸','') }}</button>
-                </div>
-              </div>
+              <div class="photo-footer"><span>第 {{ photoNumber(photo) }} 张</span><button class="card-more" type="button" @click.stop="openPhoto(photo)">···</button></div>
             </article>
           </div>
         </section>
@@ -277,7 +275,7 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
     <div v-if="lightbox" class="lightbox" @click.self="closePhoto" @touchstart.passive="touchStartHandler" @touchend.passive="touchEndHandler">
       <button class="close" @click="closePhoto">×</button>
       <button class="nav prev" @click="keydown({ key: 'ArrowLeft' })">‹</button>
-      <div class="lightbox-body"><img :src="lightbox.preview_url" :alt="lightbox.display_name || lightbox.filename" /><div class="watermark">名人婚纱 · 预览</div></div>
+      <div class="lightbox-body"><img :src="lightbox.preview_url" :alt="lightbox.display_name || lightbox.filename" /></div>
       <button class="nav next" @click="keydown({ key: 'ArrowRight' })">›</button>
       <aside class="lightbox-info client-lightbox-info">
         <b>{{ lightbox.display_name || lightbox.filename }}</b>
@@ -305,7 +303,7 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
               <button v-if="canEditComment(comment)" class="button ghost small danger-text" @click="deleteComment(comment)">删除</button>
             </div>
             <article v-for="reply in repliesFor(comment.id)" :key="reply.id" class="comment-reply">
-              <b>{{ authorName(reply) }}</b><small>{{ (reply.created_at || '').slice(11, 16) }}</small>
+              <b>{{ authorName(reply) }}</b><small>回复 {{ authorName(comment) }} · {{ (reply.created_at || '').slice(11, 16) }}</small>
               <p>{{ reply.content }}</p>
             </article>
           </article>

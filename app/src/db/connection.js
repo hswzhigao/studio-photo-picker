@@ -40,35 +40,41 @@ export function initializeDatabase(db) {
     db.prepare("insert into schema_migrations(version, applied_at) values ('001', ?)").run(new Date().toISOString());
   }
 
-  for (const file of migrationFiles()) {
-    const version = file.slice(0, 3);
-    if (db.prepare('select 1 from schema_migrations where version=?').get(version)) continue;
-    const sql = fs.readFileSync(new URL(file, migrationsDir), 'utf8');
-    const apply = db.transaction(() => {
-      db.exec(sql);
-      db.prepare('insert into schema_migrations(version, applied_at) values (?, ?)').run(version, new Date().toISOString());
-    });
-    apply();
+  const foreignKeys = db.pragma('foreign_keys', { simple: true });
+  db.pragma('foreign_keys = OFF');
+  try {
+    for (const file of migrationFiles()) {
+      const version = file.slice(0, 3);
+      if (db.prepare('select 1 from schema_migrations where version=?').get(version)) continue;
+      const sql = fs.readFileSync(new URL(file, migrationsDir), 'utf8');
+      const apply = db.transaction(() => {
+        db.exec(sql);
+        db.prepare('insert into schema_migrations(version, applied_at) values (?, ?)').run(version, new Date().toISOString());
+      });
+      apply();
+    }
+  } finally {
+    db.pragma(`foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`);
   }
 
   backfillCustomers(db);
   return db;
 }
 
-function backfillCustomers(db) {
+export function backfillCustomers(db) {
   if (!db.prepare("select 1 from sqlite_master where type='table' and name='customer'").get()) return;
   const selectors = db.prepare('select * from selector where customer_id is null').all();
   if (!selectors.length) return;
   const now = new Date().toISOString();
   const insert = db.prepare('insert or ignore into customer(studio_id,name,phone,password_hash,must_change_password,created_at,updated_at) values (?,?,?,?,?,?,?)');
-  const lookup = db.prepare('select id from customer where phone=?');
+  const lookup = db.prepare('select id from customer where studio_id=? and phone=?');
   const update = db.prepare('update selector set customer_id=? where id=?');
   const fill = db.transaction(() => {
     for (const selector of selectors) {
       const job = db.prepare('select studio_id from job where id=?').get(selector.job_id);
       if (!job) continue;
       insert.run(job.studio_id, selector.name, selector.phone, bcrypt.hashSync(process.env.INITIAL_CUSTOMER_PASSWORD || generateReadablePassword(), 10), 1, now, now);
-      update.run(lookup.get(selector.phone).id, selector.id);
+      update.run(lookup.get(job.studio_id, selector.phone).id, selector.id);
     }
   });
   fill();

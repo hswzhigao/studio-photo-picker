@@ -12,7 +12,7 @@ export function setSelection(db, { jobId, selectorId, photoId, selected }) {
     && db.prepare(`select 1 from photo p where p.id=? and p.job_id=? and ${visiblePhotoCondition('p')}`).get(photoId, jobId);
   if (!belongs) throw new Error('PHOTO_NOT_IN_JOB');
   const job = db.prepare('select status from job where id=?').get(jobId);
-  if (job.status === 'locked') throw new Error('JOB_LOCKED');
+  if (['locked', 'retouching', 'delivered'].includes(job.status)) throw new Error('JOB_LOCKED');
   if (selected) db.prepare('insert or ignore into selection(selector_id,photo_id,created_at) values(?,?,?)').run(selectorId, photoId, new Date().toISOString());
   else {
     db.prepare('delete from selection where selector_id=? and photo_id=?').run(selectorId, photoId);

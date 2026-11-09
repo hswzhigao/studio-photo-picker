@@ -9,7 +9,7 @@ const jobId = computed(() => Number(route.params.id));
 const summary = ref(null);
 const jobs = ref([]);
 const loading = ref(true);
-const error = ref('');
+const error = ref(''), actionsOpen = ref(false);
 const context = reactive({ jobId: 0, job: null, summary: null, selectors: [], refresh: null });
 provide('jobContext', context);
 
@@ -43,6 +43,7 @@ async function action(name, body = {}) {
   try {
     const method = name === 'publish' ? 'patch' : 'post';
     await api[method](`/api/admin/jobs/${jobId.value}/${name}`, body);
+    actionsOpen.value = false;
     await refresh();
   } catch (e) { error.value = e.message; }
 }
@@ -50,9 +51,10 @@ function reopen() {
   const reason = window.prompt('请输入退回修改原因');
   if (reason?.trim()) action('reopen', { reason: reason.trim() });
 }
+function closeActions() { actionsOpen.value = false; }
 function switchJob(id) { router.push(`/admin/jobs/${id}/summary`); }
 function exportCsv() { window.location.href = `/api/admin/jobs/${jobId.value}/export.csv`; }
-watch(jobId, refresh, { immediate: true });
+watch(jobId, () => { actionsOpen.value = false; refresh(); }, { immediate: true });
 onMounted(refresh);
 </script>
 
@@ -68,15 +70,16 @@ onMounted(refresh);
           </select>
         </label>
       </div>
-      <div class="actions">
-        <button class="button ghost" @click="refresh">刷新</button>
+      <div class="actions job-actions">
+        <button class="button ghost desktop-action" @click="refresh">刷新</button>
         <button v-if="context.job?.status === 'draft'" class="button primary" @click="action('publish')">发布</button>
         <button v-if="['selecting', 'submitted'].includes(context.job?.status)" class="button primary" @click="action('lock')">确认并锁定</button>
         <button v-if="['locked', 'retouching', 'delivered'].includes(context.job?.status)" class="button ghost" @click="reopen">退回修改</button>
-        <button class="button ghost" @click="action('remind')">提醒未提交</button>
-        <button class="button ghost" @click="action('settle')">标记已结算</button>
-        <button class="button ghost" @click="exportCsv">导出 CSV</button>
-        <router-link class="button ghost" :to="`/admin/jobs/${jobId}/photos?export=1`">导出原图</router-link>
+        <button class="button ghost desktop-action" @click="action('remind')">提醒未提交</button>
+        <button class="button ghost desktop-action" @click="action('settle')">标记已结算</button>
+        <button class="button ghost desktop-action" @click="exportCsv">导出 CSV</button>
+        <router-link class="button ghost desktop-action" :to="`/admin/jobs/${jobId}/photos?export=1`">导出原图</router-link>
+        <button class="button ghost mobile-more" @click="actionsOpen = true">更多</button>
       </div>
     </header>
     <div v-if="error" class="alert danger">{{ error }}</div>
@@ -85,5 +88,16 @@ onMounted(refresh);
     </div>
     <div v-if="loading" class="loading">正在加载订单…</div>
     <router-view v-else />
+    <div v-if="actionsOpen" class="admin-drawer-backdrop" @click.self="closeActions">
+      <section class="admin-drawer">
+        <div class="section-head"><h2>更多操作</h2><button class="button ghost small" @click="closeActions">关闭</button></div>
+        <button class="button ghost full" @click="refresh(); closeActions()">刷新</button>
+        <button v-if="['locked','retouching','delivered'].includes(context.job?.status)" class="button ghost full" @click="reopen">退回修改</button>
+        <button class="button ghost full" @click="action('remind')">提醒未提交</button>
+        <button class="button ghost full" @click="action('settle')">标记已结算</button>
+        <button class="button ghost full" @click="exportCsv(); closeActions()">导出 CSV</button>
+        <button class="button ghost full" @click="router.push(`/admin/jobs/${jobId}/photos?export=1`)">导出原图</button>
+      </section>
+    </div>
   </div>
 </template>

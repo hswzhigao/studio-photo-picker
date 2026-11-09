@@ -50,6 +50,7 @@ async function withdraw() {
   } catch (e) { error.value = e.message; }
   finally { busy.value = false; }
 }
+function goSelect() { router.push(`/jobs/${jobId.value}?filter=print`); }
 function productSuggestion(product) {
   return (product.suggestions || []).find(suggestion => suggestion.selector_id === review.value?.me?.id) || (product.suggestions || [])[0] || null;
 }
@@ -87,9 +88,10 @@ onMounted(load);
       <section v-for="product in products" :key="product.item.id" class="card product-review">
         <div class="section-head"><h2>{{ product.item.name }}</h2><span class="muted">{{ product.final ? '已指定' : '未指定' }}</span></div>
         <div v-if="product.final" class="product-final">
-          <img v-if="product.final.photo_id" :src="`/media/previews/${product.final.photo_id}.webp`" :alt="product.final.display_name || product.final.filename" />
-          <div><b>{{ product.final.display_name || product.final.filename }}</b><p class="muted">由 {{ product.final.selector_name }} 指定</p></div>
+          <img :src="product.final.thumb_url || `/media/thumbs/${product.final.photo_id}.webp`" :alt="product.final.display_name || product.final.filename" loading="eager" />
+          <div class="product-final-info"><b>{{ product.final.display_name || product.final.filename }}</b><p class="muted">由 {{ product.final.selector_name }} 指定</p><button class="button ghost small" @click="goSelect">更换</button></div>
         </div>
+        <div v-else class="product-empty"><span>还没有指定照片</span><button class="button ghost small" @click="goSelect">去指定</button></div>
         <div v-if="product.suggestions?.length" class="suggestions">
           <p class="eyebrow">建议</p>
           <div v-for="suggestion in product.suggestions" :key="suggestion.photo_id" class="suggestion-row">

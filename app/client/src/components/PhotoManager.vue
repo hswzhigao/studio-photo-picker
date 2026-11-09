@@ -523,7 +523,7 @@ onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); wi
       <span class="muted">共 {{ totalPhotos }} 张</span>
     </div>
 
-    <div class="photo-toolbar secondary">
+    <div v-if="selected.length" class="photo-toolbar secondary">
       <div class="actions">
         <button class="button ghost small" type="button" @click="toggleSelectAll">{{ allSelected ? '取消全选' : '全选' }}</button>
         <span class="muted">已选 {{ selected.length }} 张</span>

@@ -42,6 +42,18 @@ describe('phase 6 admin API', () => {
     expect(allLogs.status).toBe(200); expect(allLogs.body.logs.map(log=>log.action)).toContain('POST /api/admin/customers');
   });
 
+  it('excludes acceptance folders from source imports', async () => {
+    fs.mkdirSync(path.join(c.root, '验收截图'));
+    fs.mkdirSync(path.join(c.root, '正常底片'));
+    fs.writeFileSync(path.join(c.root, '验收截图', 'a.jpg'), 'x');
+    fs.writeFileSync(path.join(c.root, '正常底片', 'b.jpg'), 'x');
+    const dirs = await request(c.app).get('/api/admin/source-dirs').set('Cookie', adminCookie);
+    expect(dirs.status).toBe(200);
+    expect(dirs.body.directories.map(dir => dir.name)).toContain('正常底片');
+    expect(dirs.body.directories.map(dir => dir.name)).not.toContain('验收截图');
+    expect((await request(c.app).post(`/api/admin/jobs/${c.job}/imports`).set('Cookie', adminCookie).send({ source: '验收截图' })).status).toBe(400);
+  });
+
   it('exposes backup settings only to admins', async () => {
     const settings = await request(c.app).get('/api/admin/settings').set('Cookie', adminCookie);
     expect(settings.status).toBe(200);

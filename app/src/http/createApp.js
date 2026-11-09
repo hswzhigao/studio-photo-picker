@@ -48,6 +48,7 @@ export function createApp({db,cfg}){
  const waitForTasks=async (timeoutMs=10000)=>{const deadline=Date.now()+timeoutMs;while(activeTasks.size&&Date.now()<deadline){const remaining=deadline-Date.now();await Promise.race([Promise.allSettled([...activeTasks]),new Promise(resolve=>setTimeout(resolve,Math.min(remaining,100)))]);}};
  const now=()=>new Date().toISOString();
  const event=(jobId,kind,actor,payload={})=>db.prepare('insert into change_event(job_id,kind,actor_type,actor_id,payload,created_at) values(?,?,?,?,?,?)').run(jobId,kind,actor?.actor_type||null,actor?.actor_id||null,JSON.stringify(payload),now());
+ const withMutation=({jobId=null,actor,action,eventKind=null,payload={}},fn)=>db.transaction(()=>{const result=fn();db.prepare('insert into audit_log(job_id,actor_type,actor_id,action,payload,created_at) values(?,?,?,?,?,?)').run(jobId,'staff',actor?.actor_id||null,action,JSON.stringify(redactAuditValue(payload)),now());if(eventKind)event(jobId,eventKind,actor,payload);return result;})();
  const jobPhoto=(jobId,photoId)=>db.prepare(`select p.id from photo p where p.id=? and p.job_id=? and ${visiblePhotoCondition('p')}`).get(photoId,jobId);
  const visibleComments=(jobId,photoId,actor)=>filterVisibleComments(db.prepare('select * from photo_comment where job_id=? and photo_id=? and deleted_at is null order by created_at,id').all(jobId,photoId),actor);
  const visibleEvents=(jobId,actor,after)=>filterVisibleEvents(db.prepare('select * from change_event where job_id=? and id>? order by id').all(jobId,after),actor).map(e=>({...e,payload:e.payload?JSON.parse(e.payload):null}));
@@ -128,7 +129,7 @@ export function createApp({db,cfg}){
  app.locals.waitForPhotoQueue = (timeoutMs) => photoQueue.waitForIdle(timeoutMs);
  app.locals.waitForPhotoIds = (ids, timeoutMs) => photoQueue.waitForIds(ids, timeoutMs);
  app.locals.cleanPackages = cleanPackages;
- const routeContext={db,cfg,now,event,jobPhoto,visibleComments,visibleEvents,commentContent,requireActor,jsonError,privateHeaders,downloadHeaders,mediaHeaders,safeFile,selectorFor,packagePhotos,packageView,cleanPackages,buildPackage,issueSession,authenticate,changePassword,createComment,ownedJob,staffStudio,adminOnly,err,union,buildSummary,exportCsv,importPhotos,scanSourceDirectory,loginGuard,photoUpload,photoQueue,trackTask};
+ const routeContext={db,cfg,now,event,withMutation,jobPhoto,visibleComments,visibleEvents,commentContent,requireActor,jsonError,privateHeaders,downloadHeaders,mediaHeaders,safeFile,selectorFor,packagePhotos,packageView,cleanPackages,buildPackage,issueSession,authenticate,changePassword,createComment,ownedJob,staffStudio,adminOnly,err,union,buildSummary,exportCsv,importPhotos,scanSourceDirectory,loginGuard,photoUpload,photoQueue,trackTask};
  registerAuth(app,routeContext); registerClient(app,routeContext); registerAdmin(app,routeContext); registerMedia(app,routeContext);
 
  const dist=path.resolve(process.cwd(),'dist');if(fs.existsSync(dist)){app.use(express.static(dist));app.get('*',(req,res)=>res.sendFile(path.join(dist,'index.html')))}

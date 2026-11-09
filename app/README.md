@@ -46,19 +46,15 @@ npm run dev
 - 验收产生的评论、备注、导出包、通知、审计和变更记录必须在验收后清理，并逐项列出。
 - 真实订单只做只读核对；任何写操作必须先得到明确授权。
 
-## 服务器字体与预览图
+## 预览图水印
 
-预览图水印使用中文字体渲染。Linux 服务器必须安装 `fonts-noto-cjk`，否则水印会显示为方框/乱码：
-
-```bash
-sudo apt-get install -y fonts-noto-cjk
-```
-
-修改水印代码或更换服务器字体后，重建全部预览图（不会修改原图）：
+水印使用仓库内的透明 PNG `assets/watermark.png`，不依赖服务器系统字体。修改水印图片后，重建全部预览图（不会修改原图）：
 
 ```bash
 DATA_DIR=/srv/studio-photo-picker/data npm run regenerate-previews
 ```
+
+预览 URL 带 `wm=2` 缓存参数，重建后客户会拉取新图；`photo.version` 不变。
 
 ## 数据与原片安全
 
