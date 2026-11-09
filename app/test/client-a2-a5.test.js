@@ -146,6 +146,16 @@ describe('A2-A5 client selection, comments, review and downloads', () => {
     expect((await request(c.app).patch(`/api/admin/jobs/${c.job}/publish`).set('Cookie', admin)).status).toBe(409);
     expect((await request(c.app).post(`/api/admin/jobs/${c.job}/lock`).set('Cookie', admin)).status).toBe(200);
     expect((await request(c.app).post(`/api/admin/jobs/${c.job}/reopen`).set('Cookie', admin).send({ reason: '退回' })).status).toBe(200);
+    await request(c.app).patch(`/api/client/jobs/${c.job}/photos/${c.p1}/slot`).set('Cookie', token).send({ job_item_id: c.frame });
+    expect((await request(c.app).delete(`/api/admin/jobs/${c.job}/items/${c.frame}`).set('Cookie', admin)).status).toBe(409);
+    const addedItem = await request(c.app).post(`/api/admin/jobs/${c.job}/items`).set('Cookie', admin).send({ name: '赠品摆台', kind: 'print_from_retouch', quantity: 1 });
+    expect(addedItem.status).toBe(201);
+    expect((await request(c.app).patch(`/api/admin/jobs/${c.job}/items/${addedItem.body.item.id}`).set('Cookie', admin).send({ quantity: 2 })).body.item.quantity).toBe(2);
+    expect((await request(c.app).delete(`/api/admin/jobs/${c.job}/items/${addedItem.body.item.id}`).set('Cookie', admin)).status).toBe(200);
+    const addedItem2 = await request(c.app).post(`/api/admin/jobs/${c.job}/items`).set('Cookie', admin).send({ name: '临时产品', kind: 'print_from_retouch', quantity: 1 });
+    expect((await request(c.app).post(`/api/admin/jobs/${c.job}/lock`).set('Cookie', admin)).status).toBe(200);
+    expect((await request(c.app).patch(`/api/admin/jobs/${c.job}/items/${addedItem2.body.item.id}`).set('Cookie', admin).send({ quantity: 2 })).status).toBe(409);
+    expect((await request(c.app).post(`/api/admin/jobs/${c.job}/reopen`).set('Cookie', admin).send({ reason: '继续' })).status).toBe(200);
     const duplicate = await request(c.app).post(`/api/admin/jobs/${c.job}/selectors`).set('Cookie', admin).send({ customer_id: c.s1 === c.s1 ? 1 : 1, phone: '13900000001', name: '小雅' });
     expect([201, 409]).toContain(duplicate.status);
     const createdJob = await request(c.app).post('/api/admin/jobs').set('Cookie', admin).send({ title: '新建测试', items: [{ name: '精修照片', kind: 'retouch', quantity: 10 }], allow_overage: false, overage_unit_price: 35, allow_original_download: false, original_download_scope: 'none', deadline_at: new Date().toISOString() });

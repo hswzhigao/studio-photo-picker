@@ -20,3 +20,4 @@
 .form-card select{min-height:42px;border:1px solid #cfc8bd;border-radius:8px;padding:0 10px;background:#fff}
 @media(max-width:720px){.new-job-page .page-head{align-items:flex-start}.wizard-steps{width:100%;overflow-x:auto;flex-wrap:nowrap}.wizard-steps span{white-space:nowrap}.wizard-actions{position:sticky;bottom:0;background:var(--bg);padding:10px 0;justify-content:stretch}.wizard-actions .button{flex:1}}
 @media(max-width:360px){.photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.item-add{margin-top:12px}

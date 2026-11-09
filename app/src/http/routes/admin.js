@@ -220,6 +220,42 @@ export function registerAdmin(app, ctx) {
       return jsonError(res, 400, 'INVALID_JOB', error.message);
     }
   });
+  app.post('/api/admin/jobs/:id/items', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    if (lockedStatuses.includes(job.status)) return jsonError(res, 409, 'JOB_LOCKED', '订单锁定后不能修改产品');
+    const name = String(req.body.name || '').trim(), kind = String(req.body.kind || 'print_from_retouch'), quantity = Number(req.body.quantity);
+    if (!name || !['retouch', 'print_from_retouch'].includes(kind) || !Number.isInteger(quantity) || quantity < 0) return jsonError(res, 400, 'INVALID_ITEM', '产品名称、类型或数量无效');
+    const sort = db.prepare('select coalesce(max(sort),0)+1 next from job_item where job_id=?').get(job.id).next;
+    const id = db.prepare('insert into job_item(job_id,name,kind,quantity,sort) values(?,?,?,?,?)').run(job.id, name, kind, quantity, sort).lastInsertRowid;
+    db.prepare('insert into audit_log(job_id,actor_type,actor_id,action,payload,created_at) values(?,?,?,?,?,?)').run(job.id, 'staff', req.actor.actor_id, 'job_item.create', JSON.stringify({ id, name, kind, quantity }), now());
+    res.status(201).json({ item: db.prepare('select * from job_item where id=?').get(id) });
+  });
+  app.patch('/api/admin/jobs/:id/items/:itemId', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    if (lockedStatuses.includes(job.status)) return jsonError(res, 409, 'JOB_LOCKED', '订单锁定后不能修改产品');
+    const item = db.prepare('select * from job_item where id=? and job_id=?').get(+req.params.itemId, job.id);
+    if (!item) return jsonError(res, 404, 'NOT_FOUND', '产品不存在');
+    const name = req.body.name === undefined ? item.name : String(req.body.name).trim();
+    const kind = req.body.kind === undefined ? item.kind : String(req.body.kind);
+    const quantity = req.body.quantity === undefined ? item.quantity : Number(req.body.quantity);
+    if (!name || !['retouch', 'print_from_retouch'].includes(kind) || !Number.isInteger(quantity) || quantity < 0) return jsonError(res, 400, 'INVALID_ITEM', '产品名称、类型或数量无效');
+    db.prepare('update job_item set name=?,kind=?,quantity=? where id=?').run(name, kind, quantity, item.id);
+    db.prepare('insert into audit_log(job_id,actor_type,actor_id,action,payload,created_at) values(?,?,?,?,?,?)').run(job.id, 'staff', req.actor.actor_id, 'job_item.update', JSON.stringify({ id: item.id, name, kind, quantity }), now());
+    res.json({ item: db.prepare('select * from job_item where id=?').get(item.id) });
+  });
+  app.delete('/api/admin/jobs/:id/items/:itemId', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    if (lockedStatuses.includes(job.status)) return jsonError(res, 409, 'JOB_LOCKED', '订单锁定后不能修改产品');
+    const item = db.prepare('select * from job_item where id=? and job_id=?').get(+req.params.itemId, job.id);
+    if (!item) return jsonError(res, 404, 'NOT_FOUND', '产品不存在');
+    if (db.prepare('select 1 from slot_assignment where job_item_id=? limit 1').get(item.id)) return jsonError(res, 409, 'ITEM_IN_USE', '这个产品已经有照片指定，不能删除');
+    db.prepare('delete from job_item where id=?').run(item.id);
+    db.prepare('insert into audit_log(job_id,actor_type,actor_id,action,payload,created_at) values(?,?,?,?,?,?)').run(job.id, 'staff', req.actor.actor_id, 'job_item.delete', JSON.stringify({ id: item.id, name: item.name }), now());
+    res.json({ ok: true });
+  });
   app.get('/api/admin/jobs/:id/selectors', requireActor('staff'), (req, res) => ownedJob(req.params.id, req.actor) ? res.json({ selectors: db.prepare('select * from selector where job_id=?').all(+req.params.id) }) : jsonError(res, 404, 'NOT_FOUND', '任务不存在'));
   app.post('/api/admin/jobs/:id/selectors', requireActor('staff'), (req, res) => {
     const job = ownedJob(req.params.id, req.actor);
