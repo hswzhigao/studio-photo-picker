@@ -39,6 +39,20 @@ npm run dev
 
 原片下载以“任务已锁定”和后台开关为前置条件；应用不会在锁定前提供原片，也不会把服务器绝对路径返回给浏览器。
 
+## 服务器字体与预览图
+
+预览图水印使用中文字体渲染。Linux 服务器必须安装 `fonts-noto-cjk`，否则水印会显示为方框/乱码：
+
+```bash
+sudo apt-get install -y fonts-noto-cjk
+```
+
+修改水印代码或更换服务器字体后，重建全部预览图（不会修改原图）：
+
+```bash
+DATA_DIR=/srv/studio-photo-picker/data npm run regenerate-previews
+```
+
 ## 数据与原片安全
 
 - 应用数据库、缩略图、预览图和 ZIP 文件只写入 `data/`。
