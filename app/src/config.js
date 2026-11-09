@@ -17,6 +17,7 @@ export const config = {
   version: process.env.APP_VERSION || '1.0.0',
   loginRateLimitMax: Number(process.env.LOGIN_RATE_LIMIT_MAX || 10),
   loginRateLimitWindowMs: Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || 60_000),
+  photoMaxBytes: Number(process.env.PHOTO_MAX_BYTES || 50 * 1024 * 1024),
   photoSourceDir: path.resolve(process.env.PHOTO_SOURCE_DIR || sourceRoot),
   dataDir: path.resolve(process.env.DATA_DIR || path.join(projectRoot, 'data')),
   studioName: '名人婚纱',

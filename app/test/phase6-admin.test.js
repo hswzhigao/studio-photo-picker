@@ -63,7 +63,7 @@ describe('phase 6 admin API', () => {
   it('queues safe imports and persists progress without exposing absolute paths', async () => {
     const outside=path.join(os.tmpdir(),`phase6-outside-${Date.now()}`); fs.writeFileSync(outside,'x'); const nested=path.join(c.root,'nested'); fs.mkdirSync(nested);
     const list=await request(c.app).get('/api/admin/source-dirs').set('Cookie',adminCookie);
-    expect(list.status).toBe(200); expect(list.body.directories.every(x=>!x.includes('..'))).toBe(true);
+    expect(list.status).toBe(200); expect(list.body.directories.every(x=>!x.name.includes('..'))).toBe(true); expect(list.body.root).toBeTruthy();
     const queued=await request(c.app).post(`/api/admin/jobs/${c.job}/imports`).set('Cookie',adminCookie).send({source:'nested'});
     expect(queued.status).toBe(202); expect(queued.body.import_task.id).toBeTruthy(); expect(JSON.stringify(queued.body)).not.toContain(outside);
     const progress=await request(c.app).get(`/api/admin/jobs/${c.job}/imports/${queued.body.import_task.id}`).set('Cookie',adminCookie);

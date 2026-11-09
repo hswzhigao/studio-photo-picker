@@ -71,7 +71,7 @@ describe('公网部署加固', () => {
     const app = createApp({ db: seededDb, cfg: { studioName: 'S', dataDir: root, photoSourceDir: root, watermarkText: 'W', trustProxy: 1 } });
     const agent = request.agent(app);
     await agent.post('/api/admin/login').send({ phone: '13800000001', password: 'admin-pass' });
-    const invalid = await agent.post(`/api/admin/jobs/${job}/photos/upload`).attach('photos', Buffer.from('not-an-image'), 'fake.jpg');
+    const invalid = await agent.post(`/api/admin/jobs/${job}/photos`).attach('photo', Buffer.from('not-an-image'), 'fake.jpg');
     expect(invalid.status).toBe(400);
     expect(invalid.body.error.code).toBe('INVALID_UPLOAD');
     fs.rmSync(root, { recursive: true, force: true });

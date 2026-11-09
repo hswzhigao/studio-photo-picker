@@ -1,0 +1,13 @@
+ALTER TABLE photo ADD COLUMN display_name TEXT;
+ALTER TABLE photo ADD COLUMN source TEXT NOT NULL DEFAULT 'import';
+ALTER TABLE photo ADD COLUMN sha256 TEXT;
+ALTER TABLE photo ADD COLUMN size_bytes INTEGER;
+ALTER TABLE photo ADD COLUMN taken_at TEXT;
+ALTER TABLE photo ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE photo ADD COLUMN deleted_at TEXT;
+ALTER TABLE photo ADD COLUMN deleted_by INTEGER;
+ALTER TABLE photo ADD COLUMN updated_at TEXT;
+CREATE INDEX idx_photo_job_sha ON photo(job_id, sha256);
+CREATE INDEX idx_photo_job_deleted ON photo(job_id, deleted_at);
+ALTER TABLE slot_assignment ADD COLUMN demoted_by_delete INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE import_task ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0;

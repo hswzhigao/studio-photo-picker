@@ -2,17 +2,44 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import sharp from 'sharp';
 import { union } from '../../services/selection.js';
 import { generateReadablePassword, suppliedPassword } from '../../services/credentials.js';
 import { backupDatabase, backupStats, pruneBackups } from '../../services/backup.js';
+import { photoImpact, softDeletePhoto, restorePhoto, photoView, normalizeDisplayName, decodeOriginalName, readImageMetadata, sha256File, extensionForFormat, moveOriginalToUploads, moveOriginalToTrash, processPhoto } from '../../services/photoManager.js';
 
 export function registerAdmin(app, ctx) {
   const {
     db, cfg, now, event, requireActor, jsonError, issueSession, exportCsv, loginGuard,
     importPhotos, scanSourceDirectory, changePassword, staffStudio, ownedJob,
-    adminOnly, err, authenticate, buildSummary, uploadPhotos,
+    adminOnly, err, authenticate, buildSummary, photoUpload, photoQueue,
   } = ctx;
+
+  const lockedStatuses = ['locked', 'retouching', 'delivered'];
+  const photoInJob = (jobId, photoId, includeDeleted = false) => db.prepare(`select * from photo where id=? and job_id=?${includeDeleted ? '' : ' and deleted_at is null'}`).get(photoId, jobId);
+  const isPhotoLocked = (job, photoId) => lockedStatuses.includes(job.status) && Boolean(db.prepare('select 1 from selection where photo_id=?').get(photoId));
+  const removeTemp = file => { if (file?.path) { try { fs.rmSync(file.path, { force: true }); } catch {} } };
+  const impactMessage = impact => {
+    const parts = [];
+    if (impact.selectors.length) parts.push(`${impact.selectors.map(s => s.name).join('、')} 选了这张`);
+    if (impact.comment_count) parts.push(`${impact.comment_count} 条评论`);
+    if (impact.slot_items.length) parts.push(`被指定为 ${impact.slot_items.map(i => i.name).join('、')}`);
+    return parts.join('；') || '这张照片还没有人选择或评论';
+  };
+  const photoSelectSql = `select p.*,
+    (select count(*) from selection s where s.photo_id=p.id) selected_count,
+    (select group_concat(u.name, '、') from selection s join selector u on u.id=s.selector_id where s.photo_id=p.id) selected_names,
+    (select count(*) from photo_comment c where c.photo_id=p.id and c.deleted_at is null) comment_count,
+    (select group_concat(j.name, '、') from slot_assignment a join job_item j on j.id=a.job_item_id where a.photo_id=p.id and a.is_final=1) slot_names
+    from photo p`;
+  const photoCounts = jobId => {
+    const row = db.prepare(`select count(*) total,
+      coalesce(sum(case when deleted_at is null and hidden=1 then 1 else 0 end),0) hidden,
+      coalesce(sum(case when deleted_at is null and import_status='processing' then 1 else 0 end),0) processing,
+      coalesce(sum(case when deleted_at is null and import_status='failed' then 1 else 0 end),0) failed,
+      coalesce(sum(case when deleted_at is not null then 1 else 0 end),0) trash
+      from photo where job_id=?`).get(jobId);
+    return row;
+  };
 
   app.post('/api/admin/login', (req, res) => {
     if (!loginGuard(req, res)) return;
@@ -173,46 +200,168 @@ export function registerAdmin(app, ctx) {
     res.status(201).json({ selector: db.prepare('select * from selector where id=?').get(id) });
   });
   app.get('/api/admin/jobs/:id/photos', requireActor('staff'), (req, res) => {
-    if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
-    res.json({ photos: db.prepare('select * from photo where job_id=? order by sort,id').all(+req.params.id) });
-  });
-  app.post('/api/admin/jobs/:id/photos/upload', requireActor('staff'), uploadPhotos.array('photos', 100), async (req, res) => {
     const job = ownedJob(req.params.id, req.actor);
     if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
-    const files = req.files || [];
-    if (!files.length) return jsonError(res, 400, 'INVALID_UPLOAD', '请选择图片');
-    const uploadDir = path.join(cfg.dataDir, 'uploads', String(job.id));
-    fs.mkdirSync(uploadDir, { recursive: true });
-    const results = [];
+    const trash = String(req.query.trash || '') === '1';
+    const conditions = ['p.job_id=?', trash ? 'p.deleted_at is not null' : 'p.deleted_at is null'];
+    const params = [job.id];
+    if (req.query.status) { conditions.push('p.import_status=?'); params.push(String(req.query.status)); }
+    if (req.query.q) { conditions.push('(coalesce(p.display_name,p.filename) like ? or p.filename like ?)'); params.push(`%${req.query.q}%`, `%${req.query.q}%`); }
+    const photos = db.prepare(`${photoSelectSql} where ${conditions.join(' and ')} order by ${trash ? 'p.deleted_at desc,p.id' : 'p.sort,p.id'}`).all(...params);
+    res.json({ photos: photos.map(photoView), counts: photoCounts(job.id), job_status: job.status });
+  });
+  app.get('/api/admin/jobs/:id/photo-queue', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    res.json({ queue: photoQueue.stats(job.id) });
+  });
+  app.post('/api/admin/jobs/:id/photos', requireActor('staff'), photoUpload.single('photo'), async (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) { removeTemp(req.file); return jsonError(res, 404, 'NOT_FOUND', '任务不存在'); }
+    if (!req.file) return jsonError(res, 400, 'INVALID_UPLOAD', '请选择图片');
     try {
-      for (const file of files) {
-        const image = sharp(file.buffer);
-        let metadata;
-        try { metadata = await image.metadata(); } catch { throw Object.assign(new Error('INVALID_UPLOAD'), { code: 'INVALID_UPLOAD' }); }
-        if (!['jpeg', 'png', 'heic'].includes(metadata.format)) throw Object.assign(new Error('INVALID_UPLOAD'), { code: 'INVALID_UPLOAD' });
-        const extension = metadata.format === 'jpeg' ? '.jpg' : `.${metadata.format}`;
-        const filename = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_') || `photo-${Date.now()}${extension}`;
-        const originalPath = path.join(uploadDir, `${crypto.randomUUID()}-${filename}`);
-        fs.writeFileSync(originalPath, file.buffer, { mode: 0o600 });
-        const photoId = db.prepare('insert into photo(job_id,filename,original_key,sort,import_status,width,height) values(?,?,?,?,?,?,?)').run(job.id, filename, originalPath, db.prepare('select coalesce(max(sort),-1)+1 sort from photo where job_id=?').get(job.id).sort, 'processing', metadata.width || null, metadata.height || null).lastInsertRowid;
-        const thumb = path.join(cfg.dataDir, 'thumbnails', `${photoId}.webp`);
-        const preview = path.join(cfg.dataDir, 'previews', `${photoId}.webp`);
-        await sharp(file.buffer).rotate().resize({ width: 400, withoutEnlargement: true }).webp({ quality: 84 }).toFile(thumb);
-        await sharp(file.buffer).rotate().resize({ width: 1600, withoutEnlargement: true }).webp({ quality: 88 }).toFile(preview);
-        db.prepare('update photo set thumb_key=?,preview_key=?,import_status=? where id=?').run(thumb, preview, 'ready', photoId);
-        results.push(db.prepare('select * from photo where id=?').get(photoId));
+      const meta = await readImageMetadata(req.file.path);
+      if (meta.error) { removeTemp(req.file); return jsonError(res, 400, 'INVALID_UPLOAD', '只接受有效的 jpg/jpeg/png/heic 图片；HEIC 无法解码时请先转为 JPG'); }
+      const sha256 = await sha256File(req.file.path);
+      if (String(req.query.allow_duplicate || '') !== '1') {
+        const duplicate = db.prepare('select id from photo where job_id=? and sha256=? and deleted_at is null').get(job.id, sha256);
+        if (duplicate) { removeTemp(req.file); return res.status(409).json({ error: { code: 'DUPLICATE_PHOTO', message: '相同照片已存在，已跳过', photo_id: duplicate.id } }); }
       }
-      return res.status(201).json({ photos: results });
+      const extension = extensionForFormat(meta.format);
+      const originalPath = moveOriginalToUploads(req.file.path, cfg.dataDir, job.id, extension);
+      const displayName = normalizeDisplayName(decodeOriginalName(req.file.originalname)) || `photo${extension}`;
+      const sort = db.prepare('select coalesce(max(sort),-1)+1 sort from photo where job_id=?').get(job.id).sort;
+      const nowIso = now();
+      const result = db.prepare('insert into photo(job_id,filename,display_name,original_key,source,sha256,size_bytes,width,height,taken_at,sort,import_status,version,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        .run(job.id, displayName, displayName, originalPath, 'upload', sha256, req.file.size, meta.width, meta.height, meta.takenAt, sort, 'processing', 1, nowIso, nowIso);
+      const photoId = Number(result.lastInsertRowid);
+      event(job.id, 'photo.uploaded', req.actor, { photo_id: photoId, display_name: displayName });
+      photoQueue.enqueue(photoId);
+      res.status(201).json({ photo: photoView(db.prepare('select * from photo where id=?').get(photoId)) });
     } catch (error) {
-      return res.status(error.code === 'INVALID_UPLOAD' ? 400 : 500).json({ error: { code: error.code === 'INVALID_UPLOAD' ? 'INVALID_UPLOAD' : 'UPLOAD_FAILED', message: error.code === 'INVALID_UPLOAD' ? '只接受有效图片文件' : '上传处理失败' } });
+      removeTemp(req.file);
+      console.error(error);
+      return jsonError(res, 500, 'UPLOAD_FAILED', '上传保存失败');
     }
   });
   app.patch('/api/admin/jobs/:id/photos/:photoId', requireActor('staff'), (req, res) => {
-    if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
-    const photo = db.prepare('select id from photo where id=? and job_id=?').get(+req.params.photoId, +req.params.id);
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const photo = photoInJob(job.id, +req.params.photoId);
     if (!photo) return jsonError(res, 404, 'NOT_FOUND', '照片不存在');
-    if (req.body.hidden !== undefined) db.prepare('update photo set hidden=? where id=?').run(req.body.hidden ? 1 : 0, photo.id);
-    res.json({ ok: true, photo: db.prepare('select * from photo where id=?').get(photo.id) });
+    const updates = [];
+    const values = [];
+    if (req.body.display_name !== undefined) {
+      const name = normalizeDisplayName(req.body.display_name);
+      if (!name) return jsonError(res, 400, 'INVALID_NAME', '显示名称不能为空');
+      updates.push('display_name=?'); values.push(name);
+    }
+    if (req.body.hidden !== undefined) { updates.push('hidden=?'); values.push(req.body.hidden ? 1 : 0); }
+    if (!updates.length) return jsonError(res, 400, 'INVALID_UPDATE', '没有可修改的字段');
+    updates.push('updated_at=?'); values.push(now(), photo.id);
+    db.prepare(`update photo set ${updates.join(',')} where id=?`).run(...values);
+    event(job.id, 'photo.updated', req.actor, { photo_id: photo.id, display_name: req.body.display_name !== undefined ? normalizeDisplayName(req.body.display_name) : undefined, hidden: req.body.hidden !== undefined ? Boolean(req.body.hidden) : undefined });
+    res.json({ ok: true, photo: photoView(db.prepare('select * from photo where id=?').get(photo.id)) });
+  });
+  app.post('/api/admin/jobs/:id/photos/reorder', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const active = db.prepare('select * from photo where job_id=? and deleted_at is null order by sort,id').all(job.id);
+    let ordered;
+    if (Array.isArray(req.body.ids)) {
+      const ids = req.body.ids.map(Number);
+      if (!ids.length || new Set(ids).size !== ids.length || ids.some(id => !Number.isInteger(id) || !active.some(p => p.id === id))) return jsonError(res, 400, 'INVALID_ORDER', '排序列表无效');
+      ordered = [...ids.map(id => active.find(p => p.id === id)), ...active.filter(p => !ids.includes(p.id))];
+    } else if (['filename', 'taken_at', 'uploaded_at'].includes(req.body.by)) {
+      ordered = [...active];
+      if (req.body.by === 'filename') ordered.sort((a, b) => String(a.display_name || a.filename).localeCompare(String(b.display_name || b.filename), 'zh-CN'));
+      if (req.body.by === 'taken_at') ordered.sort((a, b) => String(a.taken_at || a.created_at || '').localeCompare(String(b.taken_at || b.created_at || '')));
+      if (req.body.by === 'uploaded_at') ordered.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    } else return jsonError(res, 400, 'INVALID_ORDER', '排序参数无效');
+    db.transaction(() => { ordered.forEach((photo, index) => db.prepare('update photo set sort=?,updated_at=? where id=?').run(index, now(), photo.id)); })();
+    event(job.id, 'photo.reordered', req.actor, { order: ordered.map(p => p.id) });
+    res.json({ photos: db.prepare(`${photoSelectSql} where p.job_id=? and p.deleted_at is null order by p.sort,p.id`).all(job.id).map(photoView) });
+  });
+  app.put('/api/admin/jobs/:id/photos/:photoId/file', requireActor('staff'), photoUpload.single('photo'), async (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) { removeTemp(req.file); return jsonError(res, 404, 'NOT_FOUND', '任务不存在'); }
+    const photo = photoInJob(job.id, +req.params.photoId);
+    if (!photo) { removeTemp(req.file); return jsonError(res, 404, 'NOT_FOUND', '照片不存在'); }
+    if (!req.file) return jsonError(res, 400, 'INVALID_UPLOAD', '请选择图片');
+    if (isPhotoLocked(job, photo.id)) { removeTemp(req.file); return jsonError(res, 409, 'JOB_LOCKED', '客户已提交，不能替换已被选中的照片'); }
+    try {
+      const meta = await readImageMetadata(req.file.path);
+      if (meta.error) { removeTemp(req.file); return jsonError(res, 400, 'INVALID_UPLOAD', '只接受有效的 jpg/jpeg/png/heic 图片；HEIC 无法解码时请先转为 JPG'); }
+      const sha256 = await sha256File(req.file.path);
+      const duplicate = db.prepare('select id from photo where job_id=? and sha256=? and id<>? and deleted_at is null').get(job.id, sha256, photo.id);
+      if (duplicate) { removeTemp(req.file); return res.status(409).json({ error: { code: 'DUPLICATE_PHOTO', message: '相同照片已存在，已跳过', photo_id: duplicate.id } }); }
+      if (photo.source === 'upload') moveOriginalToTrash(photo.original_key, cfg.dataDir, job.id, photo.id, photo.version || 1);
+      const extension = extensionForFormat(meta.format);
+      const originalPath = moveOriginalToUploads(req.file.path, cfg.dataDir, job.id, extension);
+      const newName = normalizeDisplayName(decodeOriginalName(req.file.originalname)) || photo.filename;
+      db.prepare('update photo set filename=?,display_name=?,original_key=?,source=?,sha256=?,size_bytes=?,width=?,height=?,taken_at=?,version=version+1,import_status=?,import_error=null,updated_at=? where id=?')
+        .run(newName, photo.display_name || photo.filename, originalPath, 'upload', sha256, req.file.size, meta.width, meta.height, meta.takenAt, 'processing', now(), photo.id);
+      try { await processPhoto(db, cfg, photo.id); } catch {}
+      event(job.id, 'photo.replaced', req.actor, { photo_id: photo.id, version: (photo.version || 1) + 1 });
+      res.json({ ok: true, photo: photoView(db.prepare('select * from photo where id=?').get(photo.id)) });
+    } catch (error) {
+      removeTemp(req.file);
+      console.error(error);
+      return jsonError(res, 500, 'UPLOAD_FAILED', '替换失败');
+    }
+  });
+  app.delete('/api/admin/jobs/:id/photos/:photoId', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const photo = photoInJob(job.id, +req.params.photoId);
+    if (!photo) return jsonError(res, 404, 'NOT_FOUND', '照片不存在');
+    if (isPhotoLocked(job, photo.id)) return jsonError(res, 409, 'JOB_LOCKED', '客户已提交，照片已被选中，需先退回修改');
+    const impact = photoImpact(db, photo.id);
+    if (impact.has_impact && !req.body?.confirm) return res.status(409).json({ error: { code: 'CONFIRM_REQUIRED', message: impactMessage(impact), impact } });
+    softDeletePhoto(db, { photo, staffId: req.actor.actor_id });
+    event(job.id, 'photo.deleted', req.actor, { photo_id: photo.id, display_name: photo.display_name || photo.filename, impact });
+    res.json({ ok: true, photo: photoView(db.prepare('select * from photo where id=?').get(photo.id)), impact });
+  });
+  app.post('/api/admin/jobs/:id/photos/:photoId/restore', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const photo = photoInJob(job.id, +req.params.photoId, true);
+    if (!photo || !photo.deleted_at) return jsonError(res, 404, 'NOT_FOUND', '回收站中找不到这张照片');
+    restorePhoto(db, { photo });
+    event(job.id, 'photo.restored', req.actor, { photo_id: photo.id, display_name: photo.display_name || photo.filename });
+    res.json({ ok: true, photo: photoView(db.prepare('select * from photo where id=?').get(photo.id)) });
+  });
+  app.post('/api/admin/jobs/:id/photos/batch', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const action = String(req.body.action || '');
+    if (!['hide', 'show', 'delete', 'restore'].includes(action)) return jsonError(res, 400, 'INVALID_ACTION', '批量操作无效');
+    const ids = Array.isArray(req.body.ids) ? [...new Set(req.body.ids.map(Number))].filter(id => Number.isInteger(id) && id > 0) : [];
+    if (!ids.length) return jsonError(res, 400, 'INVALID_IDS', '请选择照片');
+    const photos = db.prepare(`select * from photo where job_id=? and id in (${ids.map(() => '?').join(',')})${action === 'restore' ? '' : ' and deleted_at is null'}`).all(job.id, ...ids);
+    if (photos.length !== ids.length) return jsonError(res, 404, 'NOT_FOUND', '部分照片不存在');
+    if (action === 'delete') {
+      for (const photo of photos) if (isPhotoLocked(job, photo.id)) return jsonError(res, 409, 'JOB_LOCKED', `照片 ${photo.display_name || photo.filename} 已被选中，需先退回修改`);
+      if (!req.body.confirm) {
+        const impacts = photos.map(photo => ({ photo_id: photo.id, display_name: photo.display_name || photo.filename, ...photoImpact(db, photo.id) }));
+        if (impacts.some(impact => impact.has_impact)) return res.status(409).json({ error: { code: 'CONFIRM_REQUIRED', message: impacts.filter(i => i.has_impact).map(i => `${i.display_name}：${impactMessage(i)}`).join('；'), impact: impacts } });
+      }
+    }
+    db.transaction(() => {
+      for (const photo of photos) {
+        if (action === 'hide' || action === 'show') {
+          db.prepare('update photo set hidden=?,updated_at=? where id=?').run(action === 'hide' ? 1 : 0, now(), photo.id);
+          event(job.id, 'photo.updated', req.actor, { photo_id: photo.id, hidden: action === 'hide' });
+        } else if (action === 'delete') {
+          softDeletePhoto(db, { photo, staffId: req.actor.actor_id });
+          event(job.id, 'photo.deleted', req.actor, { photo_id: photo.id, display_name: photo.display_name || photo.filename });
+        } else {
+          restorePhoto(db, { photo });
+          event(job.id, 'photo.restored', req.actor, { photo_id: photo.id, display_name: photo.display_name || photo.filename });
+        }
+      }
+    })();
+    res.json({ ok: true, affected: photos.length });
   });
   app.patch('/api/admin/jobs/:id/selectors/:selectorId', requireActor('staff'), (req, res) => {
     if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
@@ -246,7 +395,16 @@ export function registerAdmin(app, ctx) {
 
   app.get('/api/admin/source-dirs', requireActor('staff'), (req, res) => {
     const root = path.resolve(cfg.photoSourceDir);
-    res.json({ directories: fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name) });
+    let directories = [];
+    let rootImageCount = 0;
+    if (fs.existsSync(root)) {
+      directories = fs.readdirSync(root, { withFileTypes: true })
+        .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+        .map(entry => ({ name: entry.name, image_count: scanSourceDirectory(path.join(root, entry.name)).length }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+      rootImageCount = scanSourceDirectory(root).length;
+    }
+    res.json({ root, root_image_count: rootImageCount, directories });
   });
   app.post('/api/admin/jobs/:id/imports', requireActor('staff'), (req, res) => {
     if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
@@ -260,14 +418,14 @@ export function registerAdmin(app, ctx) {
       return jsonError(res, 400, 'INVALID_SOURCE', '导入目录无效');
     }
     const relative = path.relative(fs.realpathSync(root), realSource) || '.';
-    const id = db.prepare("insert into import_task(job_id,source,status,created_at) values(?,?,?,'')").run(+req.params.id, relative, 'pending').lastInsertRowid;
-    db.prepare('update import_task set created_at=? where id=?').run(now(), id);
+    const id = db.prepare('insert into import_task(job_id,source,status,created_at) values(?,?,?,?)').run(+req.params.id, relative, 'pending', now()).lastInsertRowid;
     const taskId = Number(id);
     setImmediate(async () => {
       try {
         db.prepare("update import_task set status='processing',total=? where id=?").run(scanSourceDirectory(realSource).length, taskId);
-        const result = await importPhotos({ db, jobId: +req.params.id, sourceDir: realSource, dataDir: cfg.dataDir, watermarkText: cfg.watermarkText, onProgress: ({ processed, failed }) => db.prepare('update import_task set processed=?,failed=? where id=?').run(processed, failed, taskId) });
-        db.prepare("update import_task set status='completed',total=?,processed=?,failed=?,finished_at=? where id=?").run(result.total, result.total, result.failed, now(), taskId);
+        const result = await importPhotos({ db, jobId: +req.params.id, sourceDir: realSource, dataDir: cfg.dataDir, watermarkText: cfg.watermarkText, queue: photoQueue, onProgress: ({ processed, failed, skipped }) => db.prepare('update import_task set processed=?,failed=?,skipped=? where id=?').run(processed, failed, skipped, taskId) });
+        await photoQueue.waitForIds(result.ids);
+        db.prepare("update import_task set status='completed',total=?,processed=?,failed=?,skipped=?,finished_at=? where id=?").run(result.total, result.total, result.failed, result.skipped, now(), taskId);
       } catch {
         db.prepare("update import_task set status='failed',errors=?,finished_at=? where id=?").run('IMPORT_FAILED', now(), taskId);
       }
@@ -276,16 +434,8 @@ export function registerAdmin(app, ctx) {
   });
   app.get('/api/admin/jobs/:id/imports/:taskId', requireActor('staff'), (req, res) => {
     if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
-    const task = db.prepare('select id,job_id,status,total,processed,failed,errors from import_task where id=? and job_id=?').get(+req.params.taskId, +req.params.id);
+    const task = db.prepare('select id,job_id,status,total,processed,failed,skipped,errors from import_task where id=? and job_id=?').get(+req.params.taskId, +req.params.id);
     return task ? res.json({ import_task: task }) : jsonError(res, 404, 'NOT_FOUND', '导入任务不存在');
-  });
-  app.post('/api/admin/jobs/:id/import', requireActor('staff'), async (req, res) => {
-    try {
-      if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
-      res.json(await importPhotos({ db, jobId: +req.params.id, sourceDir: cfg.photoSourceDir, dataDir: cfg.dataDir, watermarkText: cfg.watermarkText }));
-    } catch (error) {
-      err(error, res);
-    }
   });
 
   app.post('/api/admin/jobs/:id/remind', requireActor('staff'), (req, res) => {
