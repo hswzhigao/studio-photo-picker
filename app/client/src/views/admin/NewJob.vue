@@ -6,7 +6,7 @@ import { generateReadablePassword, loginInfoText } from '../../utils/password';
 
 const router = useRouter();
 const step = ref(1), job = ref(null), busy = ref(false), error = ref(''), message = ref('');
-const title = ref('');
+const title = ref(''), templates = ref([]), templateId = ref('');
 const form = reactive({ deadline: '', retouch: 20, frame: 1, desk: 1, overage: true, price: 20, download: true, scope: 'selected' });
 const sourceDirs = ref([]), source = ref(''), rootImages = ref(0), importTask = ref(null);
 const selectors = ref([]), customers = ref([]), customerId = ref('');
@@ -20,7 +20,10 @@ const importPercent = computed(() => {
   return Math.round(((task.processed || 0) / task.total) * 100);
 });
 
-async function loadTemplates() { /* 保留模板接口，产品行由本向导直接生成 */ }
+async function loadTemplates() {
+  try { const data = await api.get('/api/admin/package-templates'); templates.value = data.templates || []; }
+  catch (e) { error.value = e.message; }
+}
 async function loadSourceDirs() {
   try { const data = await api.get('/api/admin/source-dirs'); sourceDirs.value = data.directories || []; rootImages.value = data.root_image_count || 0; }
   catch (e) { error.value = e.message; }
@@ -36,7 +39,8 @@ async function loadSelectors() {
     customers.value = customerData.customers || [];
   } catch (e) { error.value = e.message; }
 }
-function applyTemplate(template) {
+function applyTemplate() {
+  const template = templates.value.find(item => String(item.id) === String(templateId.value));
   if (!template) return;
   const items = template.items || [];
   const retouch = items.find(item => item.kind === 'retouch');
@@ -153,6 +157,7 @@ onBeforeUnmount(() => clearInterval(pollTimer));
 
     <section v-if="step === 1" class="card form-card">
       <label>订单标题<input v-model="title" placeholder="例如：廖府" /></label>
+      <label v-if="templates.length">套用套餐模板<select v-model="templateId" @change="applyTemplate"><option value="">不使用模板</option><option v-for="template in templates" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
       <label>截止时间<input v-model="form.deadline" type="datetime-local" /></label>
       <div class="inline-form">
         <label>精修数量<input v-model.number="form.retouch" type="number" min="0" /></label>

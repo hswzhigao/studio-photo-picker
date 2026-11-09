@@ -49,7 +49,6 @@ const topComments = computed(() => comments.value.filter(comment => !comment.par
 const repliesFor = id => comments.value.filter(comment => comment.parent_id === id);
 
 function showToast(message, type = 'success') {
-  toast.value = message;
   toast.value = { message, type };
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toast.value = ''; }, 2600);

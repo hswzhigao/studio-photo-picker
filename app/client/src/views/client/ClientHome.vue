@@ -13,7 +13,7 @@ const client = inject('client');
       <div class="client-job-list">
         <router-link v-for="job in client.jobs" :key="job.id" class="client-job-card" :to="`/jobs/${job.id}`">
           <h2>{{ job.title }}</h2>
-          <p class="muted">{{ job.submitted ? '已提交' : job.status === 'locked' ? '已锁定' : '选片中' }} · 截止 {{ (job.deadline_at || '').slice(0, 10) }}</p>
+          <p class="muted">{{ job.submitted ? '已提交' : job.status === 'locked' ? '已锁定' : job.status === 'retouching' ? '修图中' : job.status === 'delivered' ? '已交付' : job.status === 'submitted' ? '影楼确认中' : '选片中' }} · 截止 {{ (job.deadline_at || '').slice(0, 10) }}</p>
         </router-link>
       </div>
     </section>

@@ -532,7 +532,7 @@ export function registerAdmin(app, ctx) {
     if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
     if (!['locked', 'retouching', 'delivered'].includes(job.status)) return jsonError(res, 409, 'INVALID_STATUS', '当前状态不能退回修改');
     const reason = String(req.body.reason || '').trim();
-    db.prepare("update job set status='selecting',overage_settled=0,updated_at=? where id=?").run(now(), job.id);
+    db.prepare("update job set status='selecting',locked_at=null,locked_by=null,overage_settled=0,updated_at=? where id=?").run(now(), job.id);
     db.prepare("insert into notification(job_id,selector_id,kind,content,sent_at) select job_id,id,'reopen',?,? from selector where job_id=?").run(reason ? `任务已退回修改：${reason}` : '任务已退回修改', now(), job.id);
     event(job.id, 'job.status', req.actor, { status: 'selecting', reason });
     res.json({ ok: true, job: db.prepare('select * from job where id=?').get(job.id) });
