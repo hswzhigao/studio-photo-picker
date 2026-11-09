@@ -148,9 +148,16 @@ describe('A2-A5 client selection, comments, review and downloads', () => {
     expect((await request(c.app).post(`/api/admin/jobs/${c.job}/reopen`).set('Cookie', admin).send({ reason: '退回' })).status).toBe(200);
     const duplicate = await request(c.app).post(`/api/admin/jobs/${c.job}/selectors`).set('Cookie', admin).send({ customer_id: c.s1 === c.s1 ? 1 : 1, phone: '13900000001', name: '小雅' });
     expect([201, 409]).toContain(duplicate.status);
-    const createdJob = await request(c.app).post('/api/admin/jobs').set('Cookie', admin).send({ title: '新建测试', items: [{ name: '精修照片', kind: 'retouch', quantity: 10 }], allow_original_download: false, original_download_scope: 'none', deadline_at: new Date().toISOString() });
+    const createdJob = await request(c.app).post('/api/admin/jobs').set('Cookie', admin).send({ title: '新建测试', items: [{ name: '精修照片', kind: 'retouch', quantity: 10 }], allow_overage: false, overage_unit_price: 35, allow_original_download: false, original_download_scope: 'none', deadline_at: new Date().toISOString() });
     expect(createdJob.status).toBe(201);
     expect(createdJob.body.job.items[0].name).toBe('精修照片');
     expect(createdJob.body.job.allow_original_download).toBe(0);
+    expect(createdJob.body.job.allow_overage).toBe(0);
+    expect(createdJob.body.job.overage_unit_price).toBe(35);
+    expect((await request(c.app).patch(`/api/admin/jobs/${createdJob.body.job.id}`).set('Cookie', admin).send({ original_download_scope: 'bad' })).status).toBe(400);
+    expect((await request(c.app).patch(`/api/admin/jobs/${createdJob.body.job.id}`).set('Cookie', admin).send({ deadline_at: 'not-a-date' })).status).toBe(400);
+    const patched = await request(c.app).patch(`/api/admin/jobs/${createdJob.body.job.id}`).set('Cookie', admin).send({ allow_overage: true, overage_unit_price: 25 });
+    expect(patched.body.job.allow_overage).toBe(1);
+    expect(patched.body.job.overage_unit_price).toBe(25);
   });
 });

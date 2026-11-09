@@ -193,10 +193,14 @@ export function registerAdmin(app, ctx) {
   });
   app.post('/api/admin/jobs', requireActor('staff'), (req, res) => {
     const s = staffStudio(req.actor), deadline = String(req.body.deadline_at || new Date(Date.now() + 86400000).toISOString());
+    if (Number.isNaN(Date.parse(deadline))) return jsonError(res, 400, 'INVALID_DEADLINE', '截止时间无效');
     const preview = req.body.allow_preview_download === false ? 0 : 1;
     const original = req.body.allow_original_download === false ? 0 : 1;
+    const overage = req.body.allow_overage === false ? 0 : 1;
+    const overagePrice = req.body.overage_unit_price === undefined ? 20 : Number(req.body.overage_unit_price);
+    if (!Number.isFinite(overagePrice) || overagePrice < 0) return jsonError(res, 400, 'INVALID_OVERAGE', '加片单价无效');
     const scope = ['none', 'selected', 'all'].includes(req.body.original_download_scope) ? req.body.original_download_scope : 'selected';
-    const id = db.prepare("insert into job(studio_id,title,status,deadline_at,invite_token,created_by,allow_preview_download,allow_original_download,original_download_scope) values(?,?,'draft',?,?,?,?,?,?)").run(s.studio_id, String(req.body.title || '任务'), deadline, crypto.randomBytes(16).toString('hex'), req.actor.actor_id, preview, original, scope).lastInsertRowid;
+    const id = db.prepare("insert into job(studio_id,title,status,deadline_at,invite_token,created_by,allow_overage,overage_unit_price,allow_preview_download,allow_original_download,original_download_scope) values(?,?,'draft',?,?,?,?,?,?,?,?)").run(s.studio_id, String(req.body.title || '任务'), deadline, crypto.randomBytes(16).toString('hex'), req.actor.actor_id, overage, overagePrice, preview, original, scope).lastInsertRowid;
     if (Array.isArray(req.body.items) && req.body.items.length) {
       req.body.items.forEach((item, index) => db.prepare('insert into job_item(job_id,name,kind,quantity,sort) values(?,?,?,?,?)').run(id, String(item.name || '产品'), String(item.kind || 'retouch'), Number(item.quantity) || 0, index));
     } else if (req.body.template_id) db.prepare('insert into job_item(job_id,name,kind,quantity,sort) select ?,name,kind,quantity,sort from package_template_item where template_id=?').run(id, +req.body.template_id);
@@ -205,8 +209,12 @@ export function registerAdmin(app, ctx) {
   app.patch('/api/admin/jobs/:id', requireActor('staff'), (req, res) => {
     try {
       if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
-      const keys = ['allow_preview_download', 'allow_original_download', 'original_download_scope', 'title', 'deadline_at'].filter(key => req.body[key] !== undefined);
-      if (keys.length) db.prepare(`update job set ${keys.map(key => `${key}=?`).join(',')} where id=?`).run(...keys.map(key => typeof req.body[key] === 'boolean' ? Number(req.body[key]) : req.body[key]), +req.params.id);
+      if (req.body.original_download_scope !== undefined && !['none', 'selected', 'all'].includes(req.body.original_download_scope)) return jsonError(res, 400, 'INVALID_SCOPE', '原片下载范围无效');
+      if (req.body.deadline_at !== undefined && Number.isNaN(Date.parse(req.body.deadline_at))) return jsonError(res, 400, 'INVALID_DEADLINE', '截止时间无效');
+      if (req.body.overage_unit_price !== undefined && (!Number.isFinite(Number(req.body.overage_unit_price)) || Number(req.body.overage_unit_price) < 0)) return jsonError(res, 400, 'INVALID_OVERAGE', '加片单价无效');
+      const numeric = new Set(['allow_preview_download', 'allow_original_download', 'allow_overage', 'overage_unit_price']);
+      const keys = ['allow_preview_download', 'allow_original_download', 'allow_overage', 'overage_unit_price', 'original_download_scope', 'title', 'deadline_at'].filter(key => req.body[key] !== undefined);
+      if (keys.length) db.prepare(`update job set ${keys.map(key => `${key}=?`).join(',')} where id=?`).run(...keys.map(key => numeric.has(key) ? (typeof req.body[key] === 'boolean' ? Number(req.body[key]) : Number(req.body[key])) : req.body[key]), +req.params.id);
       res.json({ job: db.prepare('select * from job where id=?').get(+req.params.id) });
     } catch (error) {
       return jsonError(res, 400, 'INVALID_JOB', error.message);
