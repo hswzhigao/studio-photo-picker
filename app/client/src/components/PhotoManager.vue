@@ -2,11 +2,29 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { api } from '../api';
 
-const props = defineProps({ jobId: { type: Number, required: true } });
+const props = defineProps({
+  jobId: { type: Number, required: true },
+  filter: { type: String, default: 'all' },
+});
+const emit = defineEmits(['filter-change', 'selection-change']);
 
 const photos = ref([]);
 const counts = ref({ total: 0, hidden: 0, processing: 0, failed: 0, trash: 0 });
 const queue = ref({ processing: 0, failed: 0, ready: 0, total: 0 });
+const filterCounts = ref({});
+const quota = ref(null);
+const totalPhotos = ref(0);
+const hasMore = ref(false);
+const page = ref(1);
+const query = ref('');
+const loadingMore = ref(false);
+const comments = ref([]);
+const notes = ref([]);
+const lightboxTab = ref('selection');
+const replyText = ref('');
+const replyToId = ref(null);
+const commentError = ref('');
+let searchTimer = null;
 const jobStatus = ref('');
 const loading = ref(false);
 const error = ref('');
@@ -35,7 +53,7 @@ let importTimer = null;
 
 const doneCount = computed(() => uploadItems.value.filter(item => ['done', 'duplicate'].includes(item.status)).length);
 const uploadPercent = computed(() => uploadItems.value.length ? Math.round(uploadItems.value.reduce((sum, item) => sum + (item.status === 'done' ? 100 : item.progress || 0), 0) / uploadItems.value.length) : 0);
-const allSelected = computed(() => photos.value.length > 0 && selected.value.length === photos.value.length);
+const allSelected = computed(() => totalPhotos.value > 0 && selected.value.length >= totalPhotos.value);
 const uploadBusy = computed(() => uploadItems.value.some(item => ['queued', 'uploading'].includes(item.status)));
 
 function statusLabel(photo) {
@@ -45,19 +63,54 @@ function statusLabel(photo) {
   return '';
 }
 
-async function refresh() {
+function photoQuery(extra = {}) {
+  const params = new URLSearchParams({ trash: trash.value ? '1' : '0', filter: props.filter || 'all', page: String(page.value), page_size: '120', ...extra });
+  if (query.value.trim()) params.set('q', query.value.trim());
+  return params.toString();
+}
+async function loadPhotos(append = false) {
   if (!props.jobId) return;
-  loading.value = true;
+  if (append) loadingMore.value = true; else loading.value = true;
   try {
-    const data = await api.get(`/api/admin/jobs/${props.jobId}/photos?trash=${trash.value ? 1 : 0}`);
-    photos.value = data.photos || [];
+    const data = await api.get(`/api/admin/jobs/${props.jobId}/photos?${photoQuery()}`);
+    photos.value = append ? [...photos.value, ...(data.photos || [])] : (data.photos || []);
     counts.value = data.counts || counts.value;
+    filterCounts.value = data.filter_counts || {};
+    quota.value = data.quota || quota.value;
     jobStatus.value = data.job_status || jobStatus.value;
-    selected.value = selected.value.filter(id => photos.value.some(photo => photo.id === id));
+    totalPhotos.value = data.pagination?.total || photos.value.length;
+    hasMore.value = Boolean(data.pagination?.has_more);
+    emit('selection-change', [...selected.value]);
     error.value = '';
   } catch (e) { error.value = e.message || '照片加载失败'; }
-  finally { loading.value = false; }
+  finally { loading.value = false; loadingMore.value = false; }
 }
+async function refresh() {
+  page.value = 1;
+  await loadPhotos(false);
+}
+async function loadMore() {
+  if (loading.value || loadingMore.value || !hasMore.value) return;
+  page.value += 1;
+  await loadPhotos(true);
+}
+function onScroll() {
+  if (document.documentElement.scrollHeight - window.scrollY - window.innerHeight < 500) loadMore();
+}
+function onSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(refresh, 350);
+}
+function setFilter(value) { emit('filter-change', value); }
+function personColor(id) { return `hsl(${(Number(id) * 67) % 360} 48% 42%)`; }
+function selectionLabel(photo) {
+  const people = photo.selected_by || [];
+  if (!people.length) return '';
+  const names = people.slice(0, 2).map(person => person.name).join(' ');
+  return people.length > 2 ? `${names} +${people.length - 2}` : names;
+}
+function selectionTitle(photo) { return (photo.selected_by || []).map(person => person.name).join('、'); }
+function productNames(photo) { return (photo.slots || []).map(slot => slot.name); }
 
 async function refreshQueue() {
   if (!props.jobId) return;
@@ -84,7 +137,14 @@ function toggleSelect(id) {
   selected.value = selected.value.includes(id) ? selected.value.filter(item => item !== id) : [...selected.value, id];
 }
 
-function toggleSelectAll() { selected.value = allSelected.value ? [] : photos.value.map(photo => photo.id); }
+async function toggleSelectAll() {
+  if (allSelected.value) { selected.value = []; emit('selection-change', []); return; }
+  try {
+    const data = await api.get(`/api/admin/jobs/${props.jobId}/photos?${photoQuery({ ids_only: '1', page: '1' })}`);
+    selected.value = data.ids || [];
+    emit('selection-change', [...selected.value]);
+  } catch (e) { error.value = e.message; }
+}
 
 async function toggleTrash() {
   trash.value = !trash.value;
@@ -315,7 +375,44 @@ async function pollImport() {
   } catch (e) { error.value = e.message; }
 }
 
-function openLightbox(photo) { lightbox.value = photo; }
+async function loadLightboxData() {
+  if (!lightbox.value) return;
+  commentError.value = '';
+  try {
+    const [commentData, noteData] = await Promise.all([
+      api.get(`/api/admin/jobs/${props.jobId}/photos/${lightbox.value.id}/comments`),
+      api.get(`/api/admin/jobs/${props.jobId}/photos/${lightbox.value.id}/notes`),
+    ]);
+    comments.value = commentData.comments || [];
+    notes.value = noteData.notes || [];
+  } catch (e) { commentError.value = e.message; }
+}
+function openLightbox(photo) {
+  lightbox.value = photo;
+  lightboxTab.value = 'selection';
+  replyText.value = '';
+  replyToId.value = null;
+  comments.value = [];
+  notes.value = [];
+  loadLightboxData();
+}
+async function sendReply() {
+  const content = replyText.value.trim();
+  if (!content) return;
+  try {
+    await api.post(`/api/admin/jobs/${props.jobId}/photos/${lightbox.value.id}/comments`, { content, ...(replyToId.value ? { parent_id: replyToId.value } : {}) });
+    replyText.value = '';
+    replyToId.value = null;
+    await loadLightboxData();
+  } catch (e) { commentError.value = e.message; }
+}
+function startReply(comment) { replyToId.value = comment.id; }
+async function deleteComment(comment) {
+  if (!window.confirm('确定删除这条评论？')) return;
+  try { await api.del(`/api/admin/jobs/${props.jobId}/photos/${lightbox.value.id}/comments/${comment.id}`); await loadLightboxData(); }
+  catch (e) { commentError.value = e.message; }
+}
+function commentAuthor(comment) { return comment.author_name || (comment.author_type === 'staff' ? '影楼' : '选片人'); }
 
 function beforeUnload(event) {
   if (!uploadBusy.value) return;
@@ -330,8 +427,9 @@ async function resetAndLoad() {
 }
 
 watch(() => props.jobId, () => { resetAndLoad(); });
-onMounted(() => { window.addEventListener('beforeunload', beforeUnload); resetAndLoad(); });
-onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); clearTimeout(queueTimer); clearTimeout(importTimer); });
+watch(() => props.filter, () => { refresh(); });
+onMounted(() => { window.addEventListener('beforeunload', beforeUnload); window.addEventListener('scroll', onScroll, { passive: true }); resetAndLoad(); });
+onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('scroll', onScroll); clearTimeout(queueTimer); clearTimeout(importTimer); clearTimeout(searchTimer); });
 </script>
 
 <template>
@@ -402,6 +500,28 @@ onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); cl
       </ul>
     </section>
 
+    <div v-if="quota" class="quota-summary">
+      <b>精修 {{ quota.retouch.selected }} / {{ quota.retouch.quota }}</b>
+      <span v-if="quota.retouch.over" class="over-text">超 {{ quota.retouch.over }} 张，¥{{ quota.retouch.amount }} 到店结算</span>
+      <span v-for="product in quota.products" :key="product.id">{{ product.name }} {{ product.assigned }}/{{ product.quantity }}</span>
+    </div>
+
+    <div v-if="!trash" class="photo-filters">
+      <button :class="{ active: filter === 'all' }" @click="setFilter('all')">全部 <small>{{ filterCounts.all || 0 }}</small></button>
+      <button :class="{ active: filter === 'selected' }" @click="setFilter('selected')">已选 <small>{{ filterCounts.selected || 0 }}</small></button>
+      <button :class="{ active: filter === 'unselected' }" @click="setFilter('unselected')">未选 <small>{{ filterCounts.unselected || 0 }}</small></button>
+      <button :class="{ active: filter === 'slot' }" @click="setFilter('slot')">相框 / 摆台 <small>{{ filterCounts.slot || 0 }}</small></button>
+      <button :class="{ active: filter === 'commented' }" @click="setFilter('commented')">有评论 <small>{{ filterCounts.commented || 0 }}</small><i v-if="filterCounts.commented_unread" class="red-dot"></i></button>
+      <button :class="{ active: filter === 'noted' }" @click="setFilter('noted')">有备注 <small>{{ filterCounts.noted || 0 }}</small></button>
+      <button :class="{ active: filter === 'hidden' }" @click="setFilter('hidden')">已隐藏 <small>{{ filterCounts.hidden || 0 }}</small></button>
+      <button :class="{ active: filter === 'processing' }" @click="setFilter('processing')">处理中 / 失败 <small>{{ filterCounts.processing || 0 }}</small></button>
+      <button v-for="person in (filterCounts.selectors || [])" :key="person.id" :class="{ active: filter === `selector:${person.id}` }" @click="setFilter(`selector:${person.id}`)">{{ person.name }}选的 <small>{{ person.count }}</small></button>
+    </div>
+    <div class="photo-search">
+      <input v-model="query" placeholder="搜索显示名或原始文件名" @input="onSearch" />
+      <span class="muted">共 {{ totalPhotos }} 张</span>
+    </div>
+
     <div class="photo-toolbar secondary">
       <div class="actions">
         <button class="button ghost small" type="button" @click="toggleSelectAll">{{ allSelected ? '取消全选' : '全选' }}</button>
@@ -443,9 +563,17 @@ onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); cl
           <input class="pick" type="checkbox" :checked="selected.includes(photo.id)" :aria-label="'选择 ' + photo.display_name" @click.stop @change="toggleSelect(photo.id)" />
           <span v-if="photo.version > 1" class="badge version">v{{ photo.version }}</span>
           <span v-if="photo.hidden" class="badge hidden-badge">隐藏</span>
-          <span v-if="photo.selected_count" class="badge count-badge" title="选择人数">选 {{ photo.selected_count }}</span>
-          <span v-if="photo.comment_count" class="badge comment-badge" title="评论数">评 {{ photo.comment_count }}</span>
-          <span v-if="photo.slot_names" class="badge slot-badge" :title="photo.slot_names">相框</span>
+          <div v-if="photo.selected_by?.length" class="selection-badges" :title="selectionTitle(photo)">
+            <span v-for="person in photo.selected_by.slice(0, 2)" :key="person.id" :style="{ background: personColor(person.id) }">{{ person.name }}</span>
+            <span v-if="photo.selected_by.length > 2">+{{ photo.selected_by.length - 2 }}</span>
+          </div>
+          <div v-if="photo.slots?.length" class="product-badges"><span v-for="slot in photo.slots" :key="slot.id" class="badge product-badge">{{ slot.name }}</span></div>
+          <span v-if="photo.comment_count" class="badge comment-badge" :title="photo.unread_comment_count ? '有未读评论' : '评论'">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5z" fill="none" stroke="currentColor" stroke-width="2"/></svg>{{ photo.comment_count }}<i v-if="photo.unread_comment_count" class="red-dot"></i>
+          </span>
+          <span v-if="photo.note_count" class="badge note-badge" title="有客户备注">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          </span>
         </div>
         <div class="admin-photo-meta">
           <b :title="photo.display_name">{{ photo.display_name }}</b>
@@ -463,6 +591,8 @@ onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); cl
         </div>
       </article>
     </div>
+    <div v-if="hasMore" class="load-more"><button class="button ghost" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? '正在加载…' : '加载更多' }}</button></div>
+    <p v-else-if="photos.length" class="muted end-note">已显示全部 {{ totalPhotos }} 张</p>
 
     <input ref="photoInput" class="visually-hidden" type="file" multiple accept=".jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png" @change="onFilesPicked" />
     <input ref="folderInput" class="visually-hidden" type="file" webkitdirectory directory multiple @change="onFolderPicked" />
@@ -474,13 +604,49 @@ onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); cl
         <img v-if="lightbox.import_status === 'ready'" :src="lightbox.preview_url" :alt="lightbox.display_name" />
         <div class="watermark">名人婚纱 · 预览</div>
       </div>
-      <aside class="lightbox-info">
+      <aside class="lightbox-info admin-lightbox-info">
         <b>{{ lightbox.display_name }}</b>
         <p v-if="lightbox.display_name !== lightbox.filename" class="muted">原始文件名：{{ lightbox.filename }}</p>
-        <p>选择：{{ lightbox.selected_names || '暂无人选择' }}</p>
-        <p>评论：{{ lightbox.comment_count || 0 }} 条</p>
-        <p v-if="lightbox.slot_names">用途：{{ lightbox.slot_names }}</p>
-        <p class="muted">版本 v{{ lightbox.version || 1 }} · {{ lightbox.width }} × {{ lightbox.height }}</p>
+        <div class="lightbox-tabs">
+          <button :class="{ active: lightboxTab === 'selection' }" @click="lightboxTab = 'selection'">选择</button>
+          <button :class="{ active: lightboxTab === 'comments' }" @click="lightboxTab = 'comments'">评论 {{ comments.length }}</button>
+          <button :class="{ active: lightboxTab === 'notes' }" @click="lightboxTab = 'notes'">备注 {{ notes.length }}</button>
+        </div>
+        <div v-if="lightboxTab === 'selection'" class="lightbox-panel">
+          <p class="eyebrow">谁选了</p>
+          <div v-if="lightbox.selected_by?.length" class="selection-tags">
+            <span v-for="person in lightbox.selected_by" :key="person.id" :style="{ background: personColor(person.id) }">{{ person.name }}</span>
+          </div>
+          <p v-else class="muted">暂无人选择</p>
+          <p class="eyebrow">用途</p>
+          <p>{{ (lightbox.slots || []).map(slot => slot.name).join('、') || '仅精修' }}</p>
+          <p class="muted">版本 v{{ lightbox.version || 1 }} · {{ lightbox.width }} × {{ lightbox.height }}</p>
+          <a class="button ghost full" :href="`/api/admin/jobs/${jobId}/photos/${lightbox.id}/original`" target="_blank" rel="noopener">查看原图</a>
+        </div>
+        <div v-else-if="lightboxTab === 'comments'" class="lightbox-panel">
+          <div v-if="commentError" class="alert danger">{{ commentError }}</div>
+          <div v-if="!comments.length" class="muted">还没有评论。</div>
+          <article v-for="comment in comments" :key="comment.id" class="lightbox-comment" :class="{ deleted: comment.deleted_at }">
+            <div><b>{{ commentAuthor(comment) }}</b><small> {{ (comment.created_at || '').slice(0, 16).replace('T', ' ') }}</small><span v-if="comment.deleted_at" class="over-text"> 已删除</span></div>
+            <p>{{ comment.deleted_at ? '（评论已删除）' : comment.content }}</p>
+            <div v-if="!comment.deleted_at" class="comment-actions">
+              <button class="button ghost small" @click="startReply(comment)">回复</button>
+              <button class="button ghost small danger-text" @click="deleteComment(comment)">删除</button>
+            </div>
+          </article>
+          <div class="reply-box">
+            <p v-if="replyToId" class="muted">回复评论 #{{ replyToId }} <button class="link-button" @click="replyToId = null">取消</button></p>
+            <textarea v-model="replyText" rows="3" placeholder="回复客户…"></textarea>
+            <button class="button primary full" @click="sendReply">发送回复</button>
+          </div>
+        </div>
+        <div v-else class="lightbox-panel">
+          <div v-if="!notes.length" class="muted">还没有客户备注。</div>
+          <article v-for="note in notes" :key="note.id" class="lightbox-note">
+            <b>{{ note.selector_name || note.staff_name || '客户' }}</b>
+            <p>{{ note.content }}</p>
+          </article>
+        </div>
       </aside>
     </div>
   </div>

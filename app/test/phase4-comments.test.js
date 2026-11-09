@@ -1,11 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { createApp } from '../src/app.js';
 import { getDb, initializeDatabase } from '../src/db/connection.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 function setup() {
   const db = getDb(':memory:'); initializeDatabase(db); const now = new Date().toISOString();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase4-'));
   const studio = db.prepare("insert into studio(name,watermark_text,sms_sign) values ('S','W','SMS')").run().lastInsertRowid;
   const staff = db.prepare('insert into staff(studio_id,name,phone,role,password_hash,must_change_password) values (?,?,?,?,?,0)').run(studio,'Staff','13800000001','admin',bcrypt.hashSync('staff-pass',10)).lastInsertRowid;
   const c1 = db.prepare('insert into customer(studio_id,name,phone,password_hash,must_change_password,created_at,updated_at) values (?,?,?,?,?,?,?)').run(studio,'One','13900000001',bcrypt.hashSync('client-pass',10),0,now,now).lastInsertRowid;
@@ -14,7 +18,7 @@ function setup() {
   const selector = db.prepare('insert into selector(job_id,customer_id,name,phone,permission) values (?,?,?,?,?)').run(job,c1,'One','13900000001','select_submit').lastInsertRowid;
   const other = db.prepare('insert into selector(job_id,customer_id,name,phone,permission) values (?,?,?,?,?)').run(job,c2,'Two','13900000002','select_submit').lastInsertRowid;
   const photo = db.prepare("insert into photo(job_id,filename,original_key,import_status) values (?,?,?,'ready')").run(job,'a.jpg','/tmp/a').lastInsertRowid;
-  return {db, app:createApp({db,cfg:{studioName:'S',dataDir:'/tmp',photoSourceDir:'.',watermarkText:'W'}}), job, selector, other, photo};
+  return {db, root, app:createApp({db,cfg:{studioName:'S',dataDir:root,photoSourceDir:root,watermarkText:'W'}}), job, selector, other, photo};
 }
 const cookie = r => r.headers['set-cookie']?.[0]?.split(';')[0];
 async function login(app, phone, password) { return cookie(await request(app).post('/api/auth/login').send({phone,password})); }

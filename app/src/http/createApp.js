@@ -16,7 +16,7 @@ import { buildSummary, exportCsv } from '../services/export.js';
 import { importPhotos, scanSourceDirectory } from '../services/photoImport.js';
 import { createPhotoQueue, ensurePhotoDirs, purgeExpiredTrash, backfillPhotoMetadata } from '../services/photoManager.js';
 export function createApp({db,cfg}){
- cfg={...cfg,dataDir:cfg.dataDir||path.join(process.cwd(),'data')};
+ if (!cfg?.dataDir) throw new Error('createApp requires cfg.dataDir');
  ensurePhotoDirs(cfg.dataDir);
  const app=express();
  if (cfg.trustProxy) app.set('trust proxy', cfg.trustProxy);
@@ -97,7 +97,8 @@ export function createApp({db,cfg}){
  app.locals.photoQueue = photoQueue;
  app.locals.waitForPhotoQueue = (timeoutMs) => photoQueue.waitForIdle(timeoutMs);
  app.locals.waitForPhotoIds = (ids, timeoutMs) => photoQueue.waitForIds(ids, timeoutMs);
- const routeContext={db,cfg,now,event,jobPhoto,visibleComments,visibleEvents,commentContent,requireActor,jsonError,privateHeaders,downloadHeaders,mediaHeaders,safeFile,selectorFor,packagePhotos,packageView,cleanPackages,buildPackage,issueSession,authenticate,changePassword,createComment,ownedJob,staffStudio,adminOnly,err,union,buildSummary,exportCsv,importPhotos,scanSourceDirectory,loginGuard,photoUpload,photoQueue};
+ app.locals.cleanPackages = cleanPackages;
+ const routeContext={db,cfg,now,event,jobPhoto,visibleComments,visibleEvents,commentContent,requireActor,jsonError,privateHeaders,downloadHeaders,mediaHeaders,safeFile,selectorFor,packagePhotos,packageView,cleanPackages,buildPackage,issueSession,authenticate,changePassword,createComment,ownedJob,staffStudio,adminOnly,err,union,buildSummary,exportCsv,importPhotos,scanSourceDirectory,loginGuard,photoUpload,photoQueue,trackTask};
  registerAuth(app,routeContext); registerClient(app,routeContext); registerAdmin(app,routeContext); registerMedia(app,routeContext);
 
  const dist=path.resolve(process.cwd(),'dist');if(fs.existsSync(dist)){app.use(express.static(dist));app.get('*',(req,res)=>res.sendFile(path.join(dist,'index.html')))}

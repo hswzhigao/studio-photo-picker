@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import Database from 'better-sqlite3';
@@ -19,18 +19,19 @@ function setup() {
 }
 
 describe('公网部署加固', () => {
-  let db;
-  beforeEach(() => { db = setup().db; });
+  let db, root;
+  beforeEach(() => { db = setup().db; root = fs.mkdtempSync(path.join(os.tmpdir(), 'deployment-hardening-')); });
+  afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
 
   it('health includes version and database status', async () => {
-    const app = createApp({ db, cfg: { studioName: 'S', version: '1.2.3', dataDir: '.', photoSourceDir: '.', watermarkText: 'W', loginRateLimitMax: 10, loginRateLimitWindowMs: 60_000 } });
+    const app = createApp({ db, cfg: { studioName: 'S', version: '1.2.3', dataDir: root, photoSourceDir: root, watermarkText: 'W', loginRateLimitMax: 10, loginRateLimitWindowMs: 60_000 } });
     const response = await request(app).get('/api/health');
     expect(response.status).toBe(200);
     expect(response.body).toEqual(expect.objectContaining({ ok: true, version: '1.2.3', database: 'ok' }));
   });
 
   it('adds security headers and trusts the configured proxy', async () => {
-    const app = createApp({ db, cfg: { studioName: 'S', dataDir: '.', photoSourceDir: '.', watermarkText: 'W', trustProxy: 1 } });
+    const app = createApp({ db, cfg: { studioName: 'S', dataDir: root, photoSourceDir: root, watermarkText: 'W', trustProxy: 1 } });
     const response = await request(app).get('/api/health').set('X-Forwarded-Proto', 'https');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['referrer-policy']).toBe('same-origin');
@@ -41,7 +42,7 @@ describe('公网部署加固', () => {
   });
 
   it('rejects the eleventh login request from one IP within the window', async () => {
-    const app = createApp({ db, cfg: { studioName: 'S', dataDir: '.', photoSourceDir: '.', watermarkText: 'W', loginRateLimitMax: 10, loginRateLimitWindowMs: 60_000 } });
+    const app = createApp({ db, cfg: { studioName: 'S', dataDir: root, photoSourceDir: root, watermarkText: 'W', loginRateLimitMax: 10, loginRateLimitWindowMs: 60_000 } });
     for (let i = 0; i < 10; i += 1) {
       expect((await request(app).post('/api/auth/login').set('X-Forwarded-For', '203.0.113.10').send({ phone: '13800000001', password: 'wrong' })).status).toBe(401);
     }
@@ -51,7 +52,7 @@ describe('公网部署加固', () => {
   });
 
   it('uses secure production cookies when configured', async () => {
-    const app = createApp({ db, cfg: { studioName: 'S', dataDir: '.', photoSourceDir: '.', watermarkText: 'W', cookieSecure: true } });
+    const app = createApp({ db, cfg: { studioName: 'S', dataDir: root, photoSourceDir: root, watermarkText: 'W', cookieSecure: true } });
     const response = await request(app).post('/api/admin/login').send({ phone: '13800000001', password: 'admin-pass' });
     expect(response.status).toBe(200);
     expect(response.headers['set-cookie'][0]).toMatch(/HttpOnly/);

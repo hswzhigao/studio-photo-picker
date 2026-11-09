@@ -13,7 +13,7 @@ describe('database migrations', () => {
     expect(db.name).toBe(':memory:');
     expect(fs.existsSync(path.join(process.cwd(), ':memory:', 'app.sqlite'))).toBe(false);
     expect(db.prepare("select name from sqlite_master where type='table' and name='schema_migrations'").get()).toEqual({ name: 'schema_migrations' });
-    expect(db.prepare('select version from schema_migrations order by version').all().map(row => row.version)).toEqual(['001', '002', '003', '004', '005', '006', '007', '008']);
+    expect(db.prepare('select version from schema_migrations order by version').all().map(row => row.version)).toEqual(['001', '002', '003', '004', '005', '006', '007', '008', '009']);
   });
 
   it('creates the parent directory before opening a file database', () => {
@@ -30,7 +30,7 @@ describe('database migrations', () => {
     initializeDatabase(db);
     initializeDatabase(db);
 
-    expect(db.prepare('select count(*) as count from schema_migrations').get().count).toBe(8);
+    expect(db.prepare('select count(*) as count from schema_migrations').get().count).toBe(9);
     expect(db.prepare('pragma table_info(customer)').all().some(column => column.name === 'password_hash')).toBe(true);
     expect(db.prepare('pragma table_info(job)').all().some(column => column.name === 'original_download_scope')).toBe(true);
   });
@@ -47,7 +47,7 @@ describe('database migrations', () => {
 
     const migrated = getDb(dir);
     initializeDatabase(migrated);
-    expect(migrated.prepare('select version from schema_migrations order by version').all().map(row => row.version)).toEqual(['001', '002', '003', '004', '005', '006', '007', '008']);
+    expect(migrated.prepare('select version from schema_migrations order by version').all().map(row => row.version)).toEqual(['001', '002', '003', '004', '005', '006', '007', '008', '009']);
     const customer = migrated.prepare('select phone, must_change_password from customer where phone=?').get('13900000001');
     expect(customer).toEqual({ phone: '13900000001', must_change_password: 1 });
     expect(migrated.prepare('select customer_id from selector where phone=?').get('13900000001').customer_id).toBe(1);

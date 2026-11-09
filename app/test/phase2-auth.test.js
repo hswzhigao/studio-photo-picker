@@ -1,26 +1,31 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { createApp } from '../src/app.js';
 import { getDb, initializeDatabase } from '../src/db/connection.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const password = 'phase2-test-password';
 function setup() {
   const db = getDb(':memory:');
   initializeDatabase(db);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phase2-'));
   const studio = db.prepare("insert into studio(name,watermark_text,sms_sign) values ('S','W','SMS')").run().lastInsertRowid;
   const staff = db.prepare('insert into staff(studio_id,name,phone,role,password_hash,must_change_password) values (?,?,?,?,?,?)').run(studio, 'Admin', '13800000009', 'admin', bcrypt.hashSync(password, 10), 1).lastInsertRowid;
   const now = new Date().toISOString();
   const customer = db.prepare('insert into customer(studio_id,name,phone,password_hash,must_change_password,created_at,updated_at) values (?,?,?,?,?,?,?)').run(studio, 'Client', '13900000009', bcrypt.hashSync(password, 10), 1, now, now).lastInsertRowid;
   const job = db.prepare('insert into job(studio_id,title,deadline_at,invite_token,created_by) values (?,?,?,?,?)').run(studio, 'J', new Date().toISOString(), 'opaque-invite', staff).lastInsertRowid;
   db.prepare('insert into selector(job_id,customer_id,name,phone,permission) values (?,?,?,?,?)').run(job, customer, 'Client', '13900000009', 'select_submit');
-  const app = createApp({ db, cfg: { studioName: 'S', dataDir: '/tmp', photoSourceDir: '.', watermarkText: 'W' } });
-  return { db, app, staff, customer, job };
+  const app = createApp({ db, cfg: { studioName: 'S', dataDir: root, photoSourceDir: root, watermarkText: 'W' } });
+  return { db, root, app, staff, customer, job };
 }
 const cookie = response => response.headers['set-cookie']?.[0]?.split(';')[0];
 
 describe('phase 2 password authentication', () => {
   let ctx;
+  afterEach(() => { ctx?.app.locals.stopBackgroundTasks?.(); ctx?.db.close(); if (ctx?.root) fs.rmSync(ctx.root, { recursive: true, force: true }); });
   beforeEach(() => { ctx = setup(); });
 
   it('authenticates staff and customers with bcrypt passwords, not OTP or invite tokens', async () => {

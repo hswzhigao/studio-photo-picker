@@ -15,3 +15,8 @@ backups/
 .DS_Store
 验收截图/
 _to_delete/
+
+# 验收截图与证据（含客户照片）
+artifacts/
+线上验收截图*/
+线上验收*.json

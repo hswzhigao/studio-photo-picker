@@ -6,12 +6,15 @@ import { union } from '../../services/selection.js';
 import { generateReadablePassword, suppliedPassword } from '../../services/credentials.js';
 import { backupDatabase, backupStats, pruneBackups } from '../../services/backup.js';
 import { photoImpact, softDeletePhoto, restorePhoto, photoView, normalizeDisplayName, decodeOriginalName, readImageMetadata, sha256File, extensionForFormat, moveOriginalToUploads, moveOriginalToTrash, processPhoto } from '../../services/photoManager.js';
+import { normalizePhotoFilter, photoFilterCondition, photoFilterCounts, photoQuotaSummary, selectedByForPhotos, slotsForPhotos } from '../../services/photoFilters.js';
+import { buildAdminExport, adminExportView, resolveExportPhotos, sanitizeOrderName, beijingDateStamp, nextExportName } from '../../services/adminExport.js';
 
 export function registerAdmin(app, ctx) {
   const {
     db, cfg, now, event, requireActor, jsonError, issueSession, exportCsv, loginGuard,
     importPhotos, scanSourceDirectory, changePassword, staffStudio, ownedJob,
-    adminOnly, err, authenticate, buildSummary, photoUpload, photoQueue,
+    adminOnly, err, authenticate, buildSummary, photoUpload, photoQueue, trackTask,
+    safeFile, privateHeaders, downloadHeaders,
   } = ctx;
 
   const lockedStatuses = ['locked', 'retouching', 'delivered'];
@@ -26,11 +29,19 @@ export function registerAdmin(app, ctx) {
     return parts.join('；') || '这张照片还没有人选择或评论';
   };
   const photoSelectSql = `select p.*,
-    (select count(*) from selection s where s.photo_id=p.id) selected_count,
-    (select group_concat(u.name, '、') from selection s join selector u on u.id=s.selector_id where s.photo_id=p.id) selected_names,
-    (select count(*) from photo_comment c where c.photo_id=p.id and c.deleted_at is null) comment_count,
-    (select group_concat(j.name, '、') from slot_assignment a join job_item j on j.id=a.job_item_id where a.photo_id=p.id and a.is_final=1) slot_names
-    from photo p`;
+    coalesce(sel.selected_count,0) selected_count,
+    coalesce(slot.slot_count,0) slot_count,
+    coalesce(slot.slot_names,'') slot_names,
+    coalesce(cmt.comment_count,0) comment_count,
+    coalesce(note.note_count,0) note_count,
+    (select count(*) from photo_comment c where c.photo_id=p.id and c.deleted_at is null
+      and c.created_at > coalesce((select max(last_read_at) from comment_read where job_id=p.job_id and reader_type='staff'),'')
+    ) unread_comment_count
+    from photo p
+    left join (select photo_id,count(*) selected_count from selection group by photo_id) sel on sel.photo_id=p.id
+    left join (select a.photo_id,count(*) slot_count,group_concat(j.name,'、') slot_names from slot_assignment a join job_item j on j.id=a.job_item_id where a.is_final=1 group by a.photo_id) slot on slot.photo_id=p.id
+    left join (select photo_id,count(*) comment_count from photo_comment where deleted_at is null group by photo_id) cmt on cmt.photo_id=p.id
+    left join (select photo_id,count(*) note_count from photo_note group by photo_id) note on note.photo_id=p.id`;
   const photoCounts = jobId => {
     const row = db.prepare(`select count(*) total,
       coalesce(sum(case when deleted_at is null and hidden=1 then 1 else 0 end),0) hidden,
@@ -203,12 +214,34 @@ export function registerAdmin(app, ctx) {
     const job = ownedJob(req.params.id, req.actor);
     if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
     const trash = String(req.query.trash || '') === '1';
+    const selectors = db.prepare('select id,name from selector where job_id=? order by id').all(job.id);
+    const filter = normalizePhotoFilter(req.query.filter, selectors);
     const conditions = ['p.job_id=?', trash ? 'p.deleted_at is not null' : 'p.deleted_at is null'];
     const params = [job.id];
+    if (!trash) conditions.push(photoFilterCondition(filter));
     if (req.query.status) { conditions.push('p.import_status=?'); params.push(String(req.query.status)); }
     if (req.query.q) { conditions.push('(coalesce(p.display_name,p.filename) like ? or p.filename like ?)'); params.push(`%${req.query.q}%`, `%${req.query.q}%`); }
-    const photos = db.prepare(`${photoSelectSql} where ${conditions.join(' and ')} order by ${trash ? 'p.deleted_at desc,p.id' : 'p.sort,p.id'}`).all(...params);
-    res.json({ photos: photos.map(photoView), counts: photoCounts(job.id), job_status: job.status });
+    const where = conditions.join(' and ');
+    if (String(req.query.ids_only || '') === '1') {
+      const ids = db.prepare(`select p.id from photo p where ${where} order by ${trash ? 'p.deleted_at desc,p.id' : 'p.sort,p.id'}`).all(...params).map(row => row.id);
+      return res.json({ ids, total: ids.length, filter: filter.raw, filter_counts: photoFilterCounts(db, job.id, selectors) });
+    }
+    const pageSize = Math.min(200, Math.max(1, Number(req.query.page_size) || 120));
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const total = db.prepare(`select count(*) count from photo p where ${where}`).get(...params).count;
+    const rows = db.prepare(`${photoSelectSql} where ${where} order by ${trash ? 'p.deleted_at desc,p.id' : 'p.sort,p.id'} limit ? offset ?`).all(...params, pageSize, (page - 1) * pageSize);
+    const selectedBy = selectedByForPhotos(db, rows.map(photo => photo.id));
+    const slots = slotsForPhotos(db, rows.map(photo => photo.id));
+    const photos = rows.map(photo => photoView({ ...photo, selected_by: selectedBy.get(photo.id) || [], slots: slots.get(photo.id) || [] }));
+    res.json({
+      photos,
+      counts: photoCounts(job.id),
+      filter: filter.raw,
+      filter_counts: photoFilterCounts(db, job.id, selectors),
+      quota: photoQuotaSummary(db, job.id),
+      pagination: { page, page_size: pageSize, total, has_more: page * pageSize < total },
+      job_status: job.status,
+    });
   });
   app.get('/api/admin/jobs/:id/photo-queue', requireActor('staff'), (req, res) => {
     const job = ownedJob(req.params.id, req.actor);
@@ -385,7 +418,13 @@ export function registerAdmin(app, ctx) {
 
   app.get('/api/admin/jobs/:id/comments', requireActor('staff'), (req, res) => {
     if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
-    res.json({ comments: db.prepare('select * from photo_comment where job_id=? order by photo_id,created_at,id').all(+req.params.id) });
+    const selectors = new Map(db.prepare('select id,name from selector where job_id=?').all(+req.params.id).map(row => [row.id, row.name]));
+    const staff = new Map(db.prepare('select id,name from staff').all().map(row => [row.id, row.name]));
+    const comments = db.prepare('select * from photo_comment where job_id=? order by photo_id,created_at,id').all(+req.params.id).map(comment => ({
+      ...comment,
+      author_name: comment.author_type === 'staff' ? (staff.get(comment.author_id) || '影楼') : (selectors.get(comment.author_id) || '选片人'),
+    }));
+    res.json({ comments });
   });
   app.post('/api/admin/jobs/:id/comments/read', requireActor('staff'), (req, res) => {
     if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
@@ -478,7 +517,100 @@ export function registerAdmin(app, ctx) {
       : db.prepare('select a.* from audit_log a join job j on j.id=a.job_id where j.studio_id=? and a.job_id=? order by a.id desc').all(studioId, requested);
     res.json({ logs });
   });
-  app.get('/api/admin/jobs/:id/export.csv', requireActor('staff'), (req, res) => ownedJob(req.params.id, req.actor) ? res.set('Content-Type', 'text/csv; charset=utf-8').send(exportCsv(db, +req.params.id)) : jsonError(res, 404, 'NOT_FOUND', '任务不存在'));
+  app.get('/api/admin/jobs/:id/photos/:photoId/notes', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const photo = photoInJob(job.id, +req.params.photoId);
+    if (!photo) return jsonError(res, 404, 'NOT_FOUND', '照片不存在');
+    const notes = db.prepare(`select n.*,u.name selector_name,s.name staff_name from photo_note n
+      left join selector u on u.id=n.selector_id left join staff s on s.id=n.staff_id
+      where n.photo_id=? order by n.updated_at,n.id`).all(photo.id);
+    res.json({ notes });
+  });
+  app.get('/api/admin/jobs/:id/photos/:photoId/original', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const photo = photoInJob(job.id, +req.params.photoId);
+    if (!photo) return jsonError(res, 404, 'NOT_FOUND', '照片不存在');
+    const file = safeFile(photo.original_key, [cfg.dataDir, cfg.photoSourceDir]);
+    if (!file) return jsonError(res, 404, 'ORIGINAL_NOT_FOUND', '原图文件不存在');
+    privateHeaders(res);
+    res.download(file, photo.filename);
+  });
+  app.delete('/api/admin/jobs/:id/photos/:photoId/comments/:commentId', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const comment = db.prepare('select * from photo_comment where id=? and job_id=? and photo_id=? and deleted_at is null').get(+req.params.commentId, job.id, +req.params.photoId);
+    if (!comment) return jsonError(res, 404, 'NOT_FOUND', '评论不存在');
+    db.prepare('update photo_comment set deleted_at=? where id=?').run(now(), comment.id);
+    event(job.id, 'comment.deleted', req.actor, { comment_id: comment.id, photo_id: comment.photo_id, visibility: comment.visibility, audience_selector_id: comment.audience_selector_id });
+    res.json({ ok: true });
+  });
+  app.get('/api/admin/jobs/:id/exports/estimate', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const photos = resolveExportPhotos(db, job.id, { scope: String(req.query.scope || 'selected'), filter: req.query.filter, ids: String(req.query.ids || '').split(',').filter(Boolean) });
+    const bytes = photos.reduce((sum, photo) => sum + Number(photo.size_bytes || 0), 0);
+    res.json({ count: photos.length, estimated_bytes: bytes, warning: bytes > 5 * 1024 * 1024 * 1024 ? '文件较大，下载可能需要较长时间' : null });
+  });
+  app.post('/api/admin/jobs/:id/exports', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const scope = String(req.body.scope || 'selected');
+    if (!['selected', 'filter', 'ids', 'all'].includes(scope)) return jsonError(res, 400, 'INVALID_EXPORT_SCOPE', '导出范围无效');
+    const photos = resolveExportPhotos(db, job.id, { scope, filter: req.body.filter, ids: req.body.ids });
+    if (!photos.length) return jsonError(res, 400, 'NO_PHOTOS', '没有可导出的照片');
+    const estimated = photos.reduce((sum, photo) => sum + Number(photo.size_bytes || 0), 0);
+    const date = new Date();
+    const { name, file } = nextExportName(db, cfg.dataDir, job, date);
+    const expires = new Date(date.getTime() + 7 * 86400000).toISOString();
+    const id = db.prepare(`insert into download_package(job_id,kind,status,file_key,expires_at,selector_id,scope,photo_ids_hash,progress,total,error,created_at,export_name,missing,created_by,meta)
+      values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(job.id, 'admin', 'pending', file, expires, null, scope, null, 0, photos.length, null, now(), name, 0, req.actor.actor_id, null).lastInsertRowid;
+    const exportId = Number(id);
+    trackTask(buildAdminExport({
+      db, dataDir: cfg.dataDir, job, exportId, photos,
+      groupByUse: req.body.group_by_use !== false,
+      includeCsv: req.body.include_csv !== false,
+      date,
+    }).catch(error => {
+      try { db.prepare("update download_package set status='failed',error=? where id=?").run(String(error.code || 'EXPORT_FAILED'), exportId); } catch {}
+    }));
+    db.prepare('insert into audit_log(job_id,actor_type,actor_id,action,payload,created_at) values(?,?,?,?,?,?)').run(job.id, 'staff', req.actor.actor_id, 'export.admin', JSON.stringify({ export_id: exportId, scope, filter: req.body.filter || null, ids: req.body.ids || null, count: photos.length, file_name: name, estimated_bytes: estimated }), now());
+    res.status(202).json({
+      export: adminExportView(db.prepare('select * from download_package where id=?').get(exportId)),
+      estimated_bytes: estimated,
+      warning: estimated > 5 * 1024 * 1024 * 1024 ? '文件较大，下载可能需要较长时间' : null,
+    });
+  });
+  app.get('/api/admin/jobs/:id/exports', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const exports = db.prepare("select * from download_package where job_id=? and kind='admin' order by id desc limit 30").all(job.id).map(adminExportView);
+    res.json({ exports });
+  });
+  app.get('/api/admin/jobs/:id/exports/:exportId', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const row = db.prepare("select * from download_package where id=? and job_id=? and kind='admin'").get(+req.params.exportId, job.id);
+    return row ? res.json({ export: adminExportView(row) }) : jsonError(res, 404, 'NOT_FOUND', '导出任务不存在');
+  });
+  app.get('/api/admin/jobs/:id/exports/:exportId/file', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const row = db.prepare("select * from download_package where id=? and job_id=? and kind='admin' and status='ready'").get(+req.params.exportId, job.id);
+    if (!row || row.expires_at <= now()) return jsonError(res, 404, 'DOWNLOAD_NOT_FOUND', '导出文件不存在或已过期');
+    const file = safeFile(row.file_key, [cfg.dataDir]);
+    if (!file) return jsonError(res, 404, 'DOWNLOAD_NOT_FOUND', '导出文件不存在');
+    downloadHeaders(res, row.export_name || `${sanitizeOrderName(job.title)}_${beijingDateStamp(new Date())}.zip`);
+    res.sendFile(file);
+  });
+  app.get('/api/admin/jobs/:id/export.csv', requireActor('staff'), (req, res) => {
+    const job = ownedJob(req.params.id, req.actor);
+    if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
+    const name = `${sanitizeOrderName(job.title)}_${beijingDateStamp(new Date())}_修图清单.csv`;
+    downloadHeaders(res, name);
+    res.set('Content-Type', 'text/csv; charset=utf-8').send(exportCsv(db, +req.params.id));
+  });
   app.post('/api/admin/jobs/:id/lock', requireActor('staff'), (req, res) => {
     const jobId = +req.params.id, staff = db.prepare('select studio_id from staff where id=?').get(req.actor.actor_id);
     const changed = db.prepare("update job set status='locked',locked_at=?,locked_by=? where id=? and studio_id=?").run(now(), req.actor.actor_id, jobId, staff?.studio_id);
