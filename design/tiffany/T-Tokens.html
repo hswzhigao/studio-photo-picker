@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>知更鸟蓝风格 · 设计规范</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=Noto+Sans+SC:wght@400;500;700&amp;family=Noto+Serif+SC:wght@500;600&amp;display=swap">
+<style>
+body{margin:0;background:#fff}
+</style>
+</helmet>
+<div style="width: 880px; height: 760px; box-sizing: border-box; background: #FFFFFF; color: #1A1A1A; font-family: 'Noto Sans SC', system-ui, sans-serif; display: flex; flex-direction: column">
+  <div style="height: 6px; background: #81D8D0"></div>
+  <div style="padding: 48px 56px; display: flex; flex-direction: column; gap: 36px">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-family: 'Cormorant Garamond', serif; font-size: 13px; letter-spacing: 0.28em; color: #5F6866">DESIGN TOKENS</span>
+      <h1 style="margin: 0; font-family: 'Noto Serif SC', serif; font-weight: 500; font-size: 34px; letter-spacing: 0.06em">知更鸟蓝 · 设计规范</h1>
+      <p style="margin: 0; font-size: 14px; color: #5F6866; line-height: 1.7">白底、大量留白、细线、衬线标题、黑色主按钮；知更鸟蓝只用在少数关键位置（顶部色带、选中、主要提示），不大面积铺满。</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px">
+      <div style="display: flex; flex-direction: column; gap: 8px"><div style="height: 72px; background: #81D8D0"></div><b style="font-size: 13px">知更鸟蓝</b><span style="font-size: 12px; color: #5F6866">#81D8D0 · 色带/选中</span></div>
+      <div style="display: flex; flex-direction: column; gap: 8px"><div style="height: 72px; background: #D5EFEC"></div><b style="font-size: 13px">浅蓝</b><span style="font-size: 12px; color: #5F6866">#D5EFEC · 标签底</span></div>
+      <div style="display: flex; flex-direction: column; gap: 8px"><div style="height: 72px; background: #EEF8F7; border: 1px solid #E3E8E7"></div><b style="font-size: 13px">雾蓝</b><span style="font-size: 12px; color: #5F6866">#EEF8F7 · 区块底</span></div>
+      <div style="display: flex; flex-direction: column; gap: 8px"><div style="height: 72px; background: #0B5F5A"></div><b style="font-size: 13px">深青</b><span style="font-size: 12px; color: #5F6866">#0B5F5A · 链接/描边</span></div>
+      <div style="display: flex; flex-direction: column; gap: 8px"><div style="height: 72px; background: #1A1A1A"></div><b style="font-size: 13px">墨黑</b><span style="font-size: 12px; color: #5F6866">#1A1A1A · 文字/主按钮</span></div>
+      <div style="display: flex; flex-direction: column; gap: 8px"><div style="height: 72px; background: #9E3B2E"></div><b style="font-size: 13px">警示</b><span style="font-size: 12px; color: #5F6866">#9E3B2E · 超额</span></div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; border-top: 1px solid #E3E8E7; padding-top: 28px">
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <span style="font-family: 'Cormorant Garamond', serif; font-size: 13px; letter-spacing: 0.28em; color: #5F6866">TYPOGRAPHY</span>
+        <div style="font-family: 'Noto Serif SC', serif; font-weight: 500; font-size: 30px; letter-spacing: 0.06em">标题 · 思源宋体</div>
+        <div style="font-family: 'Cormorant Garamond', serif; font-size: 40px; font-weight: 500; line-height: 1">21 <span style="font-size: 22px; color: #5F6866">/ 20</span></div>
+        <div style="font-size: 15px; line-height: 1.7">正文 · 思源黑体 15px，行高 1.7</div>
+        <div style="font-family: 'Cormorant Garamond', serif; font-size: 12px; letter-spacing: 0.28em; color: #5F6866">EYEBROW · 英文小标题 字距 0.28em</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <span style="font-family: 'Cormorant Garamond', serif; font-size: 13px; letter-spacing: 0.28em; color: #5F6866">COMPONENTS</span>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap">
+          <button type="button" style="min-height: 48px; padding: 0 28px; border: none; border-radius: 2px; background: #1A1A1A; color: #fff; font-family: inherit; font-size: 14px; letter-spacing: 0.12em">主按钮</button>
+          <button type="button" style="min-height: 48px; padding: 0 28px; border: 1px solid #1A1A1A; border-radius: 2px; background: #fff; color: #1A1A1A; font-family: inherit; font-size: 14px; letter-spacing: 0.12em">次按钮</button>
+          <button type="button" style="min-height: 48px; padding: 0 28px; border: none; border-radius: 2px; background: #81D8D0; color: #1A1A1A; font-family: inherit; font-size: 14px; letter-spacing: 0.12em">关键操作</button>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+          <span style="padding: 6px 14px; border: 1px solid #1A1A1A; background: #1A1A1A; color: #fff; font-size: 13px">全部 63</span>
+          <span style="padding: 6px 14px; border: 1px solid #C9D3D1; font-size: 13px">我已选 21</span>
+          <span style="padding: 3px 10px; background: #D5EFEC; color: #0B5F5A; font-size: 12px">小雅</span>
+          <span style="width: 32px; height: 32px; border-radius: 50%; background: #81D8D0; border: 2px solid #fff; box-shadow: 0 0 0 1px #0B5F5A; display: inline-flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2.5" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+        </div>
+        <p style="margin: 0; font-size: 12px; color: #5F6866; line-height: 1.7">圆角 2px · 1px 细线 · 无阴影 · 选中照片 2px 深青描边</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":880,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

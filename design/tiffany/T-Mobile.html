@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>手机选片 · 知更鸟蓝</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&amp;family=Noto+Sans+SC:wght@400;500;700&amp;family=Noto+Serif+SC:wght@500;600&amp;display=swap">
+<style>
+body{margin:0}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #FFFFFF; color: #1A1A1A; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 14px; display: flex; flex-direction: column; overflow: hidden">
+  <div style="height: 5px; background: #81D8D0; flex-shrink: 0"></div>
+  <header style="padding: 14px 18px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E3E8E7">
+    <span style="font-family: 'Noto Serif SC', serif; font-weight: 600; font-size: 18px; letter-spacing: 0.3em">名人婚纱</span>
+    <button type="button" aria-label="菜单" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="1.5" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+    </button>
+  </header>
+  <div style="padding: 16px 18px 12px; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline">
+      <h1 style="margin: 0; font-family: 'Noto Serif SC', serif; font-weight: 500; font-size: 24px; letter-spacing: 0.12em">廖府</h1>
+      <span style="padding: 3px 10px; background: #D5EFEC; color: #0B5F5A; font-size: 12px; letter-spacing: 0.1em">选片中</span>
+    </div>
+    <span style="font-size: 12px; color: #5F6866">截止 11月16日 · 还剩 6 天</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #E3E8E7; border-bottom: 1px solid #E3E8E7">
+    <div style="padding: 10px 0; text-align: center; border-right: 1px solid #E3E8E7"><div style="font-family: 'Cormorant Garamond', serif; font-size: 24px; line-height: 1.1">20<span style="font-size: 15px; color: #5F6866">/20</span></div><div style="font-size: 11px; color: #5F6866; letter-spacing: 0.08em">精修</div></div>
+    <div style="padding: 10px 0; text-align: center; border-right: 1px solid #E3E8E7"><div style="font-family: 'Cormorant Garamond', serif; font-size: 24px; line-height: 1.1">1<span style="font-size: 15px; color: #5F6866">/1</span></div><div style="font-size: 11px; color: #5F6866; letter-spacing: 0.08em">30寸相框</div></div>
+    <div style="padding: 10px 0; text-align: center"><div style="font-family: 'Cormorant Garamond', serif; font-size: 24px; line-height: 1.1">0<span style="font-size: 15px; color: #5F6866">/1</span></div><div style="font-size: 11px; color: #9E3B2E; letter-spacing: 0.08em">10寸摆台 未指定</div></div>
+  </div>
+  <div style="display: flex; gap: 8px; padding: 12px 18px; overflow: hidden">
+    <span style="flex-shrink: 0; padding: 8px 14px; background: #1A1A1A; color: #fff; font-size: 13px">全部 63</span>
+    <span style="flex-shrink: 0; padding: 8px 14px; border: 1px solid #C9D3D1; font-size: 13px">我已选 20</span>
+    <span style="flex-shrink: 0; padding: 8px 14px; border: 1px solid #C9D3D1; font-size: 13px">未选 43</span>
+    <span style="flex-shrink: 0; padding: 8px 14px; border: 1px solid #C9D3D1; font-size: 13px">有评论</span>
+  </div>
+  <div style="flex: 1; overflow: hidden; padding: 0 4px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; align-content: start">
+    <sc-for list="{{cells}}" as="c" hint-placeholder-count="12">
+      <div style="position: relative; outline: {{c.ring}}; outline-offset: -2px">
+        <img src="{{c.src}}" alt="第{{c.no}}张" style="display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover">
+        <span style="position: absolute; top: 5px; right: 5px; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid #fff; background: {{c.bg}}; display: flex; align-items: center; justify-content: center">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="{{c.stroke}}" stroke-width="3" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+        </span>
+        <span style="position: absolute; left: 5px; bottom: 4px; font-family: 'Cormorant Garamond', serif; font-size: 13px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5)">{{c.no}}</span>
+      </div>
+    </sc-for>
+  </div>
+  <div style="padding: 12px 18px 26px; border-top: 1px solid #E3E8E7; background: #fff; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+    <button type="button" style="min-height: 48px; border: 1px solid #1A1A1A; background: #fff; color: #1A1A1A; font-size: 14px; letter-spacing: 0.16em">我的选片</button>
+    <button type="button" style="min-height: 48px; border: none; background: #1A1A1A; color: #fff; font-size: 14px; letter-spacing: 0.16em">查看并提交</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var imgs = ['4a12b0aa623365054b10fd43268746c6', '499b5e8758f0d340af26f7cd55c83ef2', 'ba0594d04f2ff4df0a598c8e9b25dd05', '7dbadfceed2a7038db2eeb51d8b51c39', '194b5896b468ed5c1e09d1022db9544f', '0a49b06ff3eeeba376306bb444a484fa'];
+    var picks = { 1: 1, 2: 1, 4: 1, 6: 1, 7: 1, 9: 1, 11: 1 };
+    var cells = [];
+    for (var i = 1; i <= 12; i++) {
+      var on = !!picks[i];
+      cells.push({ no: i, src: '/_blob/' + imgs[(i - 1) % imgs.length], ring: on ? '2px solid #0B5F5A' : '0 solid transparent', bg: on ? '#81D8D0' : 'rgba(255,255,255,0.45)', stroke: on ? '#1A1A1A' : '#FFFFFF' });
+    }
+    return { cells: cells };
+  }
+}
+</script>
+</body>
+</html>

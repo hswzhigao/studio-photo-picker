@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>登录 · 名人婚纱在线选片</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=Noto+Sans+SC:wght@400;500;700&amp;family=Noto+Serif+SC:wght@500;600&amp;display=swap">
+<style>
+body{margin:0;background:#fff}
+a{color:#0B5F5A}a:hover{color:#1A1A1A}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #FFFFFF; color: #1A1A1A; font-family: 'Noto Sans SC', system-ui, sans-serif; display: flex; flex-direction: column">
+  <div style="height: 6px; background: #81D8D0"></div>
+  <div style="flex: 1; display: flex; flex-wrap: wrap">
+    <div style="flex: 1 1 520px; min-height: 360px; background: #EEF8F7; display: flex; align-items: center; justify-content: center; padding: 48px; box-sizing: border-box">
+      <img src="/_blob/37fa670d8c2f03d3e416b6f3f5113176" alt="婚纱照样片" style="width: 100%; max-width: 640px; aspect-ratio: 640 / 437; object-fit: cover; display: block">
+    </div>
+    <div style="flex: 1 1 420px; display: flex; align-items: center; justify-content: center; padding: 64px 32px; box-sizing: border-box">
+      <form style="width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 24px">
+        <div style="display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center">
+          <span style="font-family: 'Noto Serif SC', serif; font-weight: 600; font-size: 26px; letter-spacing: 0.32em">名人婚纱</span>
+          <span style="font-family: 'Cormorant Garamond', serif; font-size: 12px; letter-spacing: 0.36em; color: #5F6866">MINGREN BRIDAL STUDIO</span>
+          <div style="width: 40px; height: 1px; background: #81D8D0; margin: 12px 0"></div>
+          <h1 style="margin: 0; font-family: 'Noto Serif SC', serif; font-weight: 500; font-size: 22px; letter-spacing: 0.08em">在线选片</h1>
+          <p style="margin: 0; font-size: 14px; color: #5F6866; line-height: 1.7">与家人一起，挑选属于你们的珍贵瞬间</p>
+        </div>
+        <label style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; letter-spacing: 0.08em; color: #5F6866">手机号
+          <input inputmode="tel" value="139 0000 0001" style="min-height: 48px; padding: 0 14px; border: none; border-bottom: 1px solid #1A1A1A; font-family: inherit; font-size: 16px; color: #1A1A1A; background: transparent; outline: none">
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; letter-spacing: 0.08em; color: #5F6866">密码
+          <span style="display: flex; align-items: center; border-bottom: 1px solid #1A1A1A">
+            <input type="password" value="12345678" style="flex: 1; min-height: 48px; padding: 0 14px; border: none; font-family: inherit; font-size: 16px; background: transparent; outline: none">
+            <button type="button" style="min-height: 44px; padding: 0 8px; border: none; background: none; color: #0B5F5A; font-family: inherit; font-size: 13px">显示</button>
+          </span>
+        </label>
+        <button type="button" style="min-height: 52px; border: none; border-radius: 2px; background: #1A1A1A; color: #FFFFFF; font-family: inherit; font-size: 15px; letter-spacing: 0.24em">进入选片</button>
+        <p style="margin: 0; text-align: center; font-size: 13px; color: #5F6866">忘记密码请联系影楼重置</p>
+      </form>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

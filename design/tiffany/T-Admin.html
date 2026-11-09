@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>后台照片页 · 知更鸟蓝</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&amp;family=Noto+Sans+SC:wght@400;500;700&amp;family=Noto+Serif+SC:wght@500;600&amp;display=swap">
+<style>
+body{margin:0;background:#fff}
+a{color:#0B5F5A}a:hover{color:#1A1A1A}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #FFFFFF; color: #1A1A1A; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 14px">
+  <div style="height: 6px; background: #81D8D0"></div>
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 40px; border-bottom: 1px solid #E3E8E7">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <span style="font-family: 'Noto Serif SC', serif; font-weight: 600; font-size: 20px; letter-spacing: 0.3em">名人婚纱</span>
+      <span style="font-family: 'Cormorant Garamond', serif; font-size: 12px; letter-spacing: 0.32em; color: #5F6866">STUDIO</span>
+    </div>
+    <nav style="display: flex; gap: 28px; flex-wrap: wrap">
+      <a href="#" style="text-decoration: none; color: #1A1A1A; letter-spacing: 0.1em; padding: 10px 0; border-bottom: 1px solid #1A1A1A">选片订单</a>
+      <a href="#" style="text-decoration: none; color: #5F6866; letter-spacing: 0.1em; padding: 10px 0">新建订单</a>
+      <a href="#" style="text-decoration: none; color: #5F6866; letter-spacing: 0.1em; padding: 10px 0">客户账号</a>
+      <a href="#" style="text-decoration: none; color: #5F6866; letter-spacing: 0.1em; padding: 10px 0">设置</a>
+    </nav>
+  </header>
+
+  <section style="padding: 32px 40px 0; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 12px; color: #5F6866; letter-spacing: 0.08em">选片订单 / 廖府</span>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <h1 style="margin: 0; font-family: 'Noto Serif SC', serif; font-weight: 500; font-size: 30px; letter-spacing: 0.12em">廖府</h1>
+        <span style="padding: 3px 10px; background: #D5EFEC; color: #0B5F5A; font-size: 12px; letter-spacing: 0.1em">选片中</span>
+      </div>
+    </div>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap">
+      <button type="button" style="min-height: 44px; padding: 0 20px; border: 1px solid #C9D3D1; background: #fff; letter-spacing: 0.1em">更多操作</button>
+      <button type="button" style="min-height: 44px; padding: 0 20px; border: 1px solid #1A1A1A; background: #fff; letter-spacing: 0.1em">导出原图</button>
+      <button type="button" style="min-height: 44px; padding: 0 24px; border: none; background: #1A1A1A; color: #fff; letter-spacing: 0.16em">确认并锁定</button>
+    </div>
+  </section>
+
+  <nav style="display: flex; gap: 32px; padding: 0 40px; margin-top: 24px; border-bottom: 1px solid #E3E8E7; overflow-x: auto" aria-label="订单详情">
+    <a href="#" style="text-decoration: none; color: #5F6866; padding: 12px 0; white-space: nowrap; letter-spacing: 0.1em">汇总</a>
+    <a href="#" style="text-decoration: none; color: #1A1A1A; padding: 12px 0; border-bottom: 2px solid #81D8D0; white-space: nowrap; letter-spacing: 0.1em">照片</a>
+    <a href="#" style="text-decoration: none; color: #5F6866; padding: 12px 0; white-space: nowrap; letter-spacing: 0.1em">选片人</a>
+    <a href="#" style="text-decoration: none; color: #5F6866; padding: 12px 0; white-space: nowrap; letter-spacing: 0.1em">评论 <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #9E3B2E; vertical-align: middle"></span></a>
+    <a href="#" style="text-decoration: none; color: #5F6866; padding: 12px 0; white-space: nowrap; letter-spacing: 0.1em">设置</a>
+    <a href="#" style="text-decoration: none; color: #5F6866; padding: 12px 0; white-space: nowrap; letter-spacing: 0.1em">日志</a>
+  </nav>
+
+  <div style="padding: 24px 40px 56px; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; flex-wrap: wrap; gap: 32px; padding: 16px 20px; background: #F6FAF9; font-size: 13px; align-items: baseline">
+      <span>精修 <b style="font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; color: #9E3B2E">23</b> / 20 <span style="color: #9E3B2E">· 超 3 张 ¥60 到店结算</span></span>
+      <span>30寸相框 <b style="font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600">1</b> / 1</span>
+      <span>10寸摆台 <b style="font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600">1</b> / 1</span>
+      <span style="margin-left: auto; color: #5F6866">共 63 张 · 隐藏 0</span>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center">
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <span style="padding: 8px 16px; border: 1px solid #C9D3D1; font-size: 13px">全部 63</span>
+        <span style="padding: 8px 16px; background: #1A1A1A; color: #fff; font-size: 13px">已选 23</span>
+        <span style="padding: 8px 16px; border: 1px solid #C9D3D1; font-size: 13px">未选 40</span>
+        <span style="padding: 8px 16px; border: 1px solid #C9D3D1; font-size: 13px">小雅 20</span>
+        <span style="padding: 8px 16px; border: 1px solid #C9D3D1; font-size: 13px">阿杰 6</span>
+        <span style="padding: 8px 16px; border: 1px solid #C9D3D1; font-size: 13px">相框 / 摆台 2</span>
+        <span style="padding: 8px 16px; border: 1px solid #C9D3D1; font-size: 13px">有评论 3</span>
+      </div>
+      <div style="display: flex; gap: 10px">
+        <label style="display: flex; align-items: center; border: 1px solid #C9D3D1; padding: 0 12px; min-height: 40px; gap: 8px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5F6866" stroke-width="1.6" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg>
+          <input placeholder="搜索文件名" aria-label="搜索文件名" style="border: none; outline: none; font-family: inherit; font-size: 14px; width: 140px">
+        </label>
+        <button type="button" style="min-height: 40px; padding: 0 18px; border: none; background: #81D8D0; color: #1A1A1A; letter-spacing: 0.1em">上传照片</button>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 24px 18px">
+      <sc-for list="{{cards}}" as="c" hint-placeholder-count="10">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="position: relative">
+            <img src="{{c.src}}" alt="第{{c.no}}张" style="display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover">
+            <input type="checkbox" aria-label="勾选第{{c.no}}张" style="position: absolute; top: 10px; left: 10px; width: 20px; height: 20px; accent-color: #0B5F5A">
+            <sc-if value="{{c.slot}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; left: 0; bottom: 0; padding: 4px 10px; background: #fff; color: #0B5F5A; font-size: 12px">{{c.slot}}</span></sc-if>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 4px; min-height: 22px">
+            <sc-for list="{{c.who}}" as="w" hint-placeholder-count="2"><span style="padding: 2px 8px; font-size: 12px; background: {{w.bg}}; color: {{w.fg}}; border: 1px solid {{w.line}}">{{w.name}}</span></sc-for>
+            <sc-if value="{{c.cm}}" hint-placeholder-val="{{ false }}"><span style="display: flex; align-items: center; gap: 3px; font-size: 12px; color: #5F6866"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path></svg>{{c.cm}}</span></sc-if>
+          </div>
+          <span style="font-size: 12px; color: #5F6866; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{c.name}}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var imgs = ['4a12b0aa623365054b10fd43268746c6', '499b5e8758f0d340af26f7cd55c83ef2', 'ba0594d04f2ff4df0a598c8e9b25dd05', '7dbadfceed2a7038db2eeb51d8b51c39', '194b5896b468ed5c1e09d1022db9544f', '0a49b06ff3eeeba376306bb444a484fa', '37fa670d8c2f03d3e416b6f3f5113176', 'bd39998f94ff8f8e3dfc648370109bc7'];
+    var ya = { name: '小雅', bg: '#D5EFEC', fg: '#0B5F5A', line: '#D5EFEC' };
+    var jie = { name: '阿杰', bg: '#FFFFFF', fg: '#1A1A1A', line: '#1A1A1A' };
+    var whoMap = { 1: [ya], 2: [ya, jie], 3: [ya], 4: [ya, jie], 5: [jie], 6: [ya], 7: [ya], 8: [ya, jie], 9: [ya], 10: [jie] };
+    var slots = { 4: '30寸相框', 6: '10寸摆台' };
+    var cm = { 4: 2, 9: 1 };
+    var names = ['微信图片_20261107192804_8.png', '微信图片_20261107192928_16.png', '微信图片_20261107193100_25.png', '微信图片_20261107193146_30.png', '微信图片_20261107193550_55.png', '微信图片_20261107193731_65.png', '微信图片_20261107192838_11.png', '微信图片_20261107193421_46.png'];
+    var cards = [];
+    for (var i = 1; i <= 10; i++) cards.push({ no: i, src: '/_blob/' + imgs[(i - 1) % imgs.length], who: whoMap[i] || [], slot: slots[i] || '', cm: cm[i] || 0, name: names[(i - 1) % names.length] });
+    return { cards: cards };
+  }
+}
+</script>
+</body>
+</html>

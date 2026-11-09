@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>选片工作台 · 知更鸟蓝</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=Noto+Sans+SC:wght@400;500;700&amp;family=Noto+Serif+SC:wght@500;600&amp;display=swap">
+<style>
+body{margin:0;background:#fff}
+a{color:#0B5F5A}a:hover{color:#1A1A1A}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #FFFFFF; color: #1A1A1A; font-family: 'Noto Sans SC', system-ui, sans-serif; font-size: 14px">
+  <div style="height: 6px; background: #81D8D0"></div>
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 48px; border-bottom: 1px solid #E3E8E7">
+    <div style="display: flex; align-items: baseline; gap: 14px">
+      <span style="font-family: 'Noto Serif SC', serif; font-weight: 600; font-size: 22px; letter-spacing: 0.32em">名人婚纱</span>
+      <span style="font-family: 'Cormorant Garamond', serif; font-size: 12px; letter-spacing: 0.32em; color: #5F6866">PHOTO SELECTION</span>
+    </div>
+    <nav style="display: flex; gap: 28px; align-items: center; flex-wrap: wrap">
+      <a href="#" style="text-decoration: none; color: #1A1A1A; font-size: 14px; letter-spacing: 0.12em; padding: 10px 0; border-bottom: 1px solid #1A1A1A">选片</a>
+      <a href="#" style="text-decoration: none; color: #5F6866; font-size: 14px; letter-spacing: 0.12em; padding: 10px 0">我的选片</a>
+      <a href="#" style="text-decoration: none; color: #5F6866; font-size: 14px; letter-spacing: 0.12em; padding: 10px 0">我的</a>
+    </nav>
+  </header>
+
+  <section style="padding: 40px 48px 8px; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-family: 'Cormorant Garamond', serif; font-size: 13px; letter-spacing: 0.32em; color: #5F6866">WEDDING · 2026</span>
+      <h1 style="margin: 0; font-family: 'Noto Serif SC', serif; font-weight: 500; font-size: 36px; letter-spacing: 0.12em">廖府</h1>
+      <span style="font-size: 13px; color: #5F6866; letter-spacing: 0.04em">选片截止 11月16日 08:21 · 还剩 6 天</span>
+    </div>
+    <span style="padding: 6px 14px; background: #D5EFEC; color: #0B5F5A; font-size: 13px; letter-spacing: 0.12em">选片中</span>
+  </section>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; padding: 24px 48px 64px; align-items: flex-start">
+    <aside style="flex: 1 1 260px; max-width: 300px; display: flex; flex-direction: column; gap: 28px">
+      <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 28px; border-bottom: 1px solid #E3E8E7">
+        <span style="font-family: 'Cormorant Garamond', serif; font-size: 12px; letter-spacing: 0.32em; color: #5F6866">YOUR PACKAGE</span>
+        <div style="display: flex; align-items: baseline; gap: 8px">
+          <span style="font-family: 'Cormorant Garamond', serif; font-size: 64px; line-height: 1; font-weight: 500; color: {{countColor}}">{{count}}</span>
+          <span style="font-family: 'Cormorant Garamond', serif; font-size: 26px; color: #5F6866">/ 20</span>
+        </div>
+        <span style="font-size: 13px; letter-spacing: 0.08em">精修照片</span>
+        <div style="height: 2px; background: #E3E8E7"><div style="height: 2px; width: {{pct}}; background: {{barColor}}"></div></div>
+        <sc-if value="{{over}}" hint-placeholder-val="{{ false }}">
+          <p style="margin: 0; font-size: 13px; color: #9E3B2E; line-height: 1.6">已超出 {{overBy}} 张 · 加片 ¥{{overAmount}}，到店结算</p>
+        </sc-if>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid #E3E8E7">
+        <div style="display: flex; justify-content: space-between; font-size: 14px"><span>30寸相框</span><span style="font-family: 'Cormorant Garamond', serif; font-size: 18px">1 / 1</span></div>
+        <div style="display: flex; justify-content: space-between; font-size: 14px"><span>10寸摆台</span><span style="font-family: 'Cormorant Garamond', serif; font-size: 18px">1 / 1</span></div>
+        <div style="display: flex; justify-content: space-between; font-size: 14px"><span>相册</span><span style="color: #5F6866; font-size: 13px">收录全部精修</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid #E3E8E7">
+        <span style="font-family: 'Cormorant Garamond', serif; font-size: 12px; letter-spacing: 0.32em; color: #5F6866">TOGETHER</span>
+        <div style="display: flex; align-items: center; gap: 12px"><span style="width: 32px; height: 32px; border-radius: 50%; background: #81D8D0; display: flex; align-items: center; justify-content: center; font-size: 13px">雅</span><span style="flex: 1">小雅 <span style="color: #5F6866; font-size: 12px">· 我</span></span><span style="font-family: 'Cormorant Garamond', serif; font-size: 18px">{{count}}</span></div>
+        <div style="display: flex; align-items: center; gap: 12px"><span style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid #1A1A1A; display: flex; align-items: center; justify-content: center; font-size: 13px">杰</span><span style="flex: 1">阿杰</span><span style="font-family: 'Cormorant Garamond', serif; font-size: 18px">6</span></div>
+        <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; cursor: pointer">
+          <span style="line-height: 1.6">让其他人看到我的选择<br><span style="color: #5F6866; font-size: 12px">影楼始终可以看到</span></span>
+          <input type="checkbox" checked style="width: 20px; height: 20px; accent-color: #0B5F5A">
+        </label>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <a href="#" style="display: flex; align-items: center; justify-content: center; min-height: 52px; background: #1A1A1A; color: #FFFFFF; text-decoration: none; font-size: 14px; letter-spacing: 0.24em">查看并提交</a>
+        <a href="#" style="display: flex; align-items: center; justify-content: center; min-height: 52px; border: 1px solid #1A1A1A; color: #1A1A1A; text-decoration: none; font-size: 14px; letter-spacing: 0.24em">我的选片</a>
+      </div>
+    </aside>
+
+    <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; gap: 8px" role="group" aria-label="筛选">
+          <sc-for list="{{filters}}" as="f" hint-placeholder-count="5">
+            <button type="button" onClick="{{f.pick}}" style="min-height: 40px; padding: 0 18px; border-radius: 0; border: 1px solid {{f.border}}; background: {{f.bg}}; color: {{f.fg}}; font-size: 13px; letter-spacing: 0.08em">{{f.label}} <span style="font-family: 'Cormorant Garamond', serif; font-size: 15px">{{f.count}}</span></button>
+          </sc-for>
+        </div>
+        <span style="font-size: 12px; color: #5F6866; letter-spacing: 0.04em">点右上角圆圈选为精修 · 点照片看大图</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 28px 20px">
+        <sc-for list="{{shown}}" as="p" hint-placeholder-count="12">
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div style="position: relative; outline: {{p.ring}}; outline-offset: 3px">
+              <a href="#" aria-label="查看大图 第{{p.no}}张" style="display: block">
+                <img src="{{p.src}}" alt="第{{p.no}}张" style="display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; background: #EEF8F7">
+              </a>
+              <button type="button" onClick="{{p.toggle}}" aria-pressed="{{p.picked}}" aria-label="{{p.label}}" style="position: absolute; top: 10px; right: 10px; width: 44px; height: 44px; border-radius: 50%; border: 2px solid #FFFFFF; background: {{p.checkBg}}; display: flex; align-items: center; justify-content: center; padding: 0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{p.checkStroke}}" stroke-width="2.5" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+              </button>
+              <sc-if value="{{p.slot}}" hint-placeholder-val="{{ false }}">
+                <span style="position: absolute; left: 0; bottom: 0; padding: 4px 10px; background: #FFFFFF; color: #0B5F5A; font-size: 12px; letter-spacing: 0.08em">{{p.slot}}</span>
+              </sc-if>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 22px">
+              <span style="font-family: 'Cormorant Garamond', serif; font-size: 15px; letter-spacing: 0.12em; color: #5F6866">No. {{p.no}}</span>
+              <span style="display: flex; gap: 6px; align-items: center">
+                <sc-if value="{{p.partner}}" hint-placeholder-val="{{ false }}"><span style="padding: 2px 8px; background: #D5EFEC; color: #0B5F5A; font-size: 12px">阿杰</span></sc-if>
+                <sc-if value="{{p.comments}}" hint-placeholder-val="{{ false }}">
+                  <span style="display: flex; align-items: center; gap: 3px; font-size: 12px; color: #5F6866"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path></svg>{{p.comments}}</span>
+                </sc-if>
+              </span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    var picks = {};
+    [1, 2, 4, 6, 7, 9].forEach(function (i) { picks[i] = true; });
+    this.state = { picks: picks, filter: 'all', base: 14 };
+  }
+  renderVals() {
+    var self = this, s = this.state;
+    var imgs = ['4a12b0aa623365054b10fd43268746c6', '499b5e8758f0d340af26f7cd55c83ef2', 'ba0594d04f2ff4df0a598c8e9b25dd05', '7dbadfceed2a7038db2eeb51d8b51c39', '194b5896b468ed5c1e09d1022db9544f', '0a49b06ff3eeeba376306bb444a484fa', '37fa670d8c2f03d3e416b6f3f5113176', 'bd39998f94ff8f8e3dfc648370109bc7'];
+    var partner = { 2: 1, 3: 1, 7: 1, 10: 1 };
+    var comments = { 4: 2, 9: 1 };
+    var slots = { 4: '30寸相框', 6: '10寸摆台' };
+    var photos = [];
+    for (var i = 1; i <= 12; i++) {
+      (function (i) {
+        var picked = !!s.picks[i];
+        photos.push({
+          no: i, src: '/_blob/' + imgs[(i - 1) % imgs.length], picked: picked,
+          ring: picked ? '2px solid #0B5F5A' : '0 solid transparent',
+          checkBg: picked ? '#81D8D0' : 'rgba(255,255,255,0.55)',
+          checkStroke: picked ? '#1A1A1A' : '#FFFFFF',
+          label: picked ? '取消精修' : '选为精修',
+          partner: !!partner[i], comments: comments[i] || 0, slot: picked ? (slots[i] || '') : '',
+          toggle: function () { var p = Object.assign({}, s.picks); if (p[i]) delete p[i]; else p[i] = true; self.setState({ picks: p }); }
+        });
+      })(i);
+    }
+    var tests = { all: function () { return true; }, mine: function (p) { return p.picked; }, un: function (p) { return !p.picked; }, partner: function (p) { return p.partner; }, cm: function (p) { return p.comments > 0; } };
+    var defs = [['all', '全部'], ['mine', '我已选'], ['un', '未选'], ['partner', '阿杰选的'], ['cm', '有评论']];
+    var filters = defs.map(function (d) {
+      var on = s.filter === d[0];
+      return { label: d[1], count: photos.filter(tests[d[0]]).length, bg: on ? '#1A1A1A' : '#FFFFFF', fg: on ? '#FFFFFF' : '#1A1A1A', border: on ? '#1A1A1A' : '#C9D3D1', pick: function () { self.setState({ filter: d[0] }); } };
+    });
+    var count = s.base + photos.filter(function (p) { return p.picked; }).length;
+    var over = count > 20;
+    return {
+      shown: photos.filter(tests[s.filter]), filters: filters, count: count,
+      pct: Math.min(100, count / 20 * 100) + '%', over: over, overBy: count - 20, overAmount: (count - 20) * 20,
+      countColor: over ? '#9E3B2E' : '#1A1A1A', barColor: over ? '#9E3B2E' : '#81D8D0'
+    };
+  }
+}
+</script>
+</body>
+</html>
