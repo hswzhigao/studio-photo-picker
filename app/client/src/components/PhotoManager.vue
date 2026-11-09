@@ -135,6 +135,7 @@ async function loadSourceInfo() {
 
 function toggleSelect(id) {
   selected.value = selected.value.includes(id) ? selected.value.filter(item => item !== id) : [...selected.value, id];
+  emit('selection-change', [...selected.value]);
 }
 
 async function toggleSelectAll() {
