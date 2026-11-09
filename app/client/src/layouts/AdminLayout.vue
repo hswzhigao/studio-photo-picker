@@ -5,7 +5,7 @@ import { api } from '../api';
 
 const router = useRouter();
 const admin = reactive({ ready: false, actor: null, mustChange: false, error: '' });
-const phone = ref(''), password = ref(''), currentPassword = ref(''), newPassword = ref(''), busy = ref(false);
+const phone = ref(''), password = ref(''), currentPassword = ref(''), newPassword = ref(''), busy = ref(false), showPassword = ref(false);
 provide('admin', admin);
 
 async function load() {
@@ -64,7 +64,7 @@ onMounted(load);
           <div class="brand">名人婚纱 · 后台</div>
           <h1>员工登录</h1>
           <label>手机号<input v-model="phone" inputmode="tel" /></label>
-          <label>密码<input v-model="password" type="password" @keyup.enter="login" /></label>
+          <label for="admin-login-password">密码</label><div class="password-row"><input id="admin-login-password" v-model="password" :type="showPassword ? 'text' : 'password'" @keyup.enter="login" /><button type="button" class="password-toggle" @click="showPassword = !showPassword">{{ showPassword ? '隐藏' : '显示' }}</button></div>
           <button class="button primary full" :disabled="busy" @click="login">进入后台</button>
           <div v-if="admin.error" class="alert danger">{{ admin.error }}</div>
         </div>
@@ -73,7 +73,7 @@ onMounted(load);
         <div class="login-card">
           <h1>首次登录请修改密码</h1>
           <label>当前密码<input v-model="currentPassword" type="password" /></label>
-          <label>新密码<input v-model="newPassword" type="password" /></label>
+          <label>新密码</label><div class="password-row"><input v-model="newPassword" :type="showPassword ? 'text' : 'password'" /><button type="button" class="password-toggle" @click="showPassword = !showPassword">{{ showPassword ? '隐藏' : '显示' }}</button></div>
           <button class="button primary full" :disabled="busy" @click="changePassword">保存新密码</button>
           <div v-if="admin.error" class="alert danger">{{ admin.error }}</div>
         </div>

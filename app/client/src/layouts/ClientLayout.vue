@@ -7,7 +7,7 @@ const route = useRoute();
 const router = useRouter();
 const client = reactive({ ready: false, actor: null, jobs: [], mustChange: false, error: '', toast: '', refreshJobs: null });
 provide('client', client);
-const phone = ref(''), password = ref(''), currentPassword = ref(''), newPassword = ref(''), busy = ref(false);
+const phone = ref(''), password = ref(''), currentPassword = ref(''), newPassword = ref(''), busy = ref(false), showPassword = ref(false);
 const meOpen = ref(false);
 let toastTimer = null;
 
@@ -83,7 +83,7 @@ onMounted(loadSession);
         <h1>选出属于你们的<br><em>精彩瞬间</em></h1>
         <p class="muted">从底片中选出精修照片，与家人一起完成最终选择。</p>
         <label>手机号<input v-model="phone" inputmode="tel" /></label>
-        <label>密码<input v-model="password" type="password" @keyup.enter="login" /></label>
+        <label for="client-login-password">密码</label><div class="password-row"><input id="client-login-password" v-model="password" :type="showPassword ? 'text' : 'password'" @keyup.enter="login" /><button type="button" class="password-toggle" @click="showPassword = !showPassword">{{ showPassword ? '隐藏' : '显示' }}</button></div>
         <button class="button primary full" :disabled="busy" @click="login">进入选片</button>
         <div v-if="client.error" class="alert danger">{{ client.error }}</div>
       </div>
@@ -92,7 +92,7 @@ onMounted(loadSession);
       <div class="login-card">
         <h1>首次登录请修改密码</h1>
         <label>当前密码<input v-model="currentPassword" type="password" /></label>
-        <label>新密码<input v-model="newPassword" type="password" /></label>
+        <label>新密码</label><div class="password-row"><input v-model="newPassword" :type="showPassword ? 'text' : 'password'" /><button type="button" class="password-toggle" @click="showPassword = !showPassword">{{ showPassword ? '隐藏' : '显示' }}</button></div>
         <button class="button primary full" :disabled="busy" @click="changePassword">保存新密码</button>
         <div v-if="client.error" class="alert danger">{{ client.error }}</div>
       </div>

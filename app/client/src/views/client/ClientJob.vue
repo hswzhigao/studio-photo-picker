@@ -16,7 +16,7 @@ const comments = ref([]), commentText = ref(''), commentVisibility = ref('all'),
 const editingId = ref(null), editingText = ref('');
 const commentError = ref('');
 const toast = ref('');
-let toastTimer = null, pollTimer = null, lastEventId = 0;
+let toastTimer = null, pollTimer = null, lastEventId = 0, touchStart = null;
 
 const productItems = computed(() => (job.value?.items || []).filter(item => item.kind === 'print_from_retouch'));
 const quota = computed(() => {
@@ -188,6 +188,14 @@ function canEditComment(comment) { return comment.author_type === 'customer' && 
 function visibilityText(comment) { return comment.visibility === 'studio_only' ? '仅影楼可见' : '所有人可见'; }
 function goSelected() { router.push(`/jobs/${jobId.value}/selected`); }
 function goReview() { router.push(`/jobs/${jobId.value}/review`); }
+function touchStartHandler(event) { const touch = event.touches[0]; touchStart = { x: touch.clientX, y: touch.clientY }; }
+function touchEndHandler(event) {
+  if (!touchStart || !lightbox.value) return;
+  const touch = event.changedTouches[0], dx = touch.clientX - touchStart.x, dy = touch.clientY - touchStart.y;
+  touchStart = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) { if (dx < 0) keydown({ key: 'ArrowRight' }); else keydown({ key: 'ArrowLeft' }); }
+  else if (dy > 90 && Math.abs(dy) > Math.abs(dx)) closePhoto();
+}
 function keydown(event) {
   if (!lightbox.value) return;
   const index = photos.value.findIndex(photo => photo.id === lightbox.value.id);
@@ -266,7 +274,7 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
       </footer>
     </template>
 
-    <div v-if="lightbox" class="lightbox" @click.self="closePhoto">
+    <div v-if="lightbox" class="lightbox" @click.self="closePhoto" @touchstart.passive="touchStartHandler" @touchend.passive="touchEndHandler">
       <button class="close" @click="closePhoto">×</button>
       <button class="nav prev" @click="keydown({ key: 'ArrowLeft' })">‹</button>
       <div class="lightbox-body"><img :src="lightbox.preview_url" :alt="lightbox.display_name || lightbox.filename" /><div class="watermark">名人婚纱 · 预览</div></div>
