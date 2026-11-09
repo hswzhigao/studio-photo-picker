@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { renderPreview } from './photoManager.js';
 
 const interruptedImportMessage = '服务重启中断，请重新导入';
 const interruptedPackageMessage = '服务重启中断，请重新打包';
@@ -21,15 +22,10 @@ async function rebuildPhoto(photo, { dataDir, photoSourceDir, watermarkText }) {
   const thumb = resolveDataFile(photo.thumb_key, dataDir) || path.join(dataDir, 'thumbnails', `${photo.id}.webp`);
   const preview = resolveDataFile(photo.preview_key, dataDir) || path.join(dataDir, 'previews', `${photo.id}.webp`);
   if (!isInside(thumb, path.join(dataDir, 'thumbnails')) || !isInside(preview, path.join(dataDir, 'previews'))) return false;
-  const metadata = await sharp(original).metadata();
-  const overlayWidth = Math.max(1, Math.min(metadata.width || 1, 1600));
-  const overlayHeight = Math.max(1, Math.min(metadata.height || 1, 80));
-  const escaped = String(watermarkText || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-  const svg = Buffer.from(`<svg width="${overlayWidth}" height="${overlayHeight}"><text x="${Math.min(20, overlayWidth - 1)}" y="${Math.min(50, overlayHeight - 1)}" fill="white" font-size="${Math.max(1, Math.min(26, overlayHeight))}" opacity=".72">${escaped}</text></svg>`);
   fs.mkdirSync(path.dirname(thumb), { recursive: true });
   fs.mkdirSync(path.dirname(preview), { recursive: true });
   if (!fs.existsSync(thumb)) await sharp(original).rotate().resize({ width: 400, withoutEnlargement: true }).webp({ quality: 84 }).toFile(thumb);
-  if (!fs.existsSync(preview)) await sharp(original).rotate().resize({ width: 1600, withoutEnlargement: true }).composite([{ input: svg, gravity: 'southeast' }]).webp({ quality: 88 }).toFile(preview);
+  if (!fs.existsSync(preview)) await renderPreview(original, preview, watermarkText || '名人婚纱 · 预览');
   return true;
 }
 

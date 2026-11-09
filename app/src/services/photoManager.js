@@ -56,10 +56,17 @@ export async function readImageMetadata(file) {
 }
 
 function watermarkSvg(width, height, text) {
-  const w = Math.max(1, Math.min(width || 1, 1600));
+  const w = Math.max(1, width || 1);
   const h = Math.max(1, Math.min(height || 1, 80));
   const escaped = String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-  return Buffer.from(`<svg width="${w}" height="${h}"><text x="${Math.min(20, w - 1)}" y="${Math.min(50, h - 1)}" fill="white" font-size="${Math.max(1, Math.min(26, h))}" opacity=".72">${escaped}</text></svg>`);
+  const fontSize = Math.max(18, Math.min(28, Math.round(w * 0.018)));
+  return Buffer.from(`<svg width="${w}" height="${h}"><text x="${Math.max(12, w - 24)}" y="${Math.max(fontSize, h - 24)}" text-anchor="end" font-family="Noto Sans CJK SC, Noto Sans SC, PingFang SC, Microsoft YaHei, sans-serif" font-size="${fontSize}" fill="white" fill-opacity=".86" stroke="black" stroke-opacity=".35" stroke-width="1.2">${escaped}</text></svg>`);
+}
+
+export async function renderPreview(original, destination, watermarkText) {
+  const base = await sharp(original).rotate().resize({ width: 1600, withoutEnlargement: true }).png().toBuffer({ resolveWithObject: true });
+  const overlay = watermarkSvg(base.info.width, base.info.height, watermarkText || '名人婚纱 · 预览');
+  await sharp(base.data).composite([{ input: overlay, gravity: 'southeast' }]).webp({ quality: 88 }).toFile(destination);
 }
 
 export function ensurePhotoDirs(dataDir) {
@@ -76,8 +83,7 @@ export async function processPhoto(db, cfg, photoId) {
   const thumb = path.join(cfg.dataDir, 'thumbnails', `${photo.id}.webp`);
   const preview = path.join(cfg.dataDir, 'previews', `${photo.id}.webp`);
   await sharp(photo.original_key).rotate().resize({ width: 400, withoutEnlargement: true }).webp({ quality: 84 }).toFile(thumb);
-  const overlay = watermarkSvg(meta.width, meta.height, cfg.watermarkText || '名人婚纱 · 预览');
-  await sharp(photo.original_key).rotate().resize({ width: 1600, withoutEnlargement: true }).composite([{ input: overlay, gravity: 'southeast' }]).webp({ quality: 88 }).toFile(preview);
+  await renderPreview(photo.original_key, preview, cfg.watermarkText || '名人婚纱 · 预览');
   db.prepare('update photo set thumb_key=?,preview_key=?,width=?,height=?,taken_at=coalesce(taken_at,?),import_status=?,import_error=null,updated_at=? where id=?')
     .run(thumb, preview, meta.width, meta.height, meta.takenAt, 'ready', new Date().toISOString(), photo.id);
   return db.prepare('select * from photo where id=?').get(photo.id);
