@@ -290,7 +290,7 @@ onUnmounted(() => { window.removeEventListener('keydown', keydown); clearInterva
           <p v-if="lightbox.others?.length" class="muted">其他人也选了：{{ lightbox.others.map(person => person.name).join('、') }}</p>
           <p class="muted">{{ deadlineText }}</p>
         </div>
-        <div v-else-if="tab === 'comments'" class="lightbox-panel">
+        <div v-else-if="tab === 'comments'" ref="commentsPanel" class="lightbox-panel comments-panel">
           <div v-if="commentError" class="alert danger">{{ commentError }}</div>
           <div v-if="!topComments.length" class="muted">还没有评论。</div>
           <article v-for="comment in topComments" :key="comment.id" class="lightbox-comment">
