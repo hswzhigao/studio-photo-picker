@@ -200,7 +200,7 @@ export function moveOriginalToTrash(file, dataDir, jobId, photoId, version) {
 
 export function photoImpact(db, photoId) {
   const selectors = db.prepare('select distinct u.id,u.name from selection s join selector u on u.id=s.selector_id where s.photo_id=? order by u.id').all(photoId);
-  const commentCount = db.prepare('select count(*) count from photo_comment where photo_id=? and deleted_at is null').get(photoId).count;
+  const commentCount = db.prepare('select count(*) count from photo_comment where photo_id=? and retouched_photo_id is null and deleted_at is null').get(photoId).count;
   const slotItems = db.prepare('select distinct j.id,j.name from slot_assignment a join job_item j on j.id=a.job_item_id where a.photo_id=? and a.is_final=1 order by j.id').all(photoId);
   return { selectors, comment_count: commentCount, slot_items: slotItems, has_impact: Boolean(selectors.length || commentCount || slotItems.length) };
 }
@@ -239,6 +239,7 @@ export function purgeExpiredTrash(db, cfg, { nowMs = Date.now(), retentionMs = T
   const rows = db.prepare('select * from photo where deleted_at is not null and deleted_at<=?').all(cutoff);
   let purged = 0;
   for (const photo of rows) {
+    if (db.prepare('select 1 from retouched_photo where photo_id=?').get(photo.id)) continue;
     if (photo.source === 'upload' && photo.original_key && pathInside(photo.original_key, cfg.dataDir)) {
       try { fs.rmSync(photo.original_key, { force: true }); } catch {}
     }

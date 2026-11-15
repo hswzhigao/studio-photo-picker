@@ -116,9 +116,10 @@ onMounted(loadSession);
             <router-link v-for="job in client.jobs" :key="job.id" :to="`/jobs/${job.id}`" class="button ghost plain">{{ job.title }}</router-link>
           </nav>
         </div>
-        <nav class="topbar-nav">
+        <nav class="topbar-nav" style="flex-wrap: wrap; column-gap: 20px; row-gap: 0; max-width: 100%">
           <router-link v-if="currentJobId" :to="`/jobs/${currentJobId}`" :class="{ active: route.path === `/jobs/${currentJobId}` }">选片</router-link>
           <router-link v-if="currentJobId" :to="`/jobs/${currentJobId}/selected`" :class="{ active: route.path === `/jobs/${currentJobId}/selected` }">我的选片</router-link>
+          <router-link v-if="currentJobId" :to="`/jobs/${currentJobId}/retouched`" :class="{ active: route.path === `/jobs/${currentJobId}/retouched` }">精修后的照片</router-link>
           <button type="button" @click="openMe">我的</button>
         </nav>
       </header>

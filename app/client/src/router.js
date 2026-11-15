@@ -4,6 +4,8 @@ import ClientHome from './views/client/ClientHome.vue';
 import ClientJob from './views/client/ClientJob.vue';
 import ClientSelected from './views/client/ClientSelected.vue';
 import ClientReview from './views/client/ClientReview.vue';
+import ClientRetouched from './views/client/ClientRetouched.vue';
+import Retouched from './views/admin/Retouched.vue';
 import AdminLayout from './layouts/AdminLayout.vue';
 import JobList from './views/admin/JobList.vue';
 import JobDetail from './views/admin/JobDetail.vue';
@@ -28,6 +30,7 @@ export const routes = [
       { path: 'jobs/:id', component: ClientJob },
       { path: 'jobs/:id/selected', component: ClientSelected },
       { path: 'jobs/:id/review', component: ClientReview },
+      { path: 'jobs/:id/retouched', component: ClientRetouched },
     ],
   },
   {
@@ -49,6 +52,7 @@ export const routes = [
           { path: 'photos', component: Photos },
           { path: 'selectors', component: Selectors },
           { path: 'comments', component: Comments },
+          { path: 'retouched', component: Retouched },
           { path: 'settings', component: JobSettings },
           { path: 'logs', component: Logs },
         ],

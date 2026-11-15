@@ -34,13 +34,13 @@ export function registerAdmin(app, ctx) {
     coalesce(slot.slot_names,'') slot_names,
     coalesce(cmt.comment_count,0) comment_count,
     coalesce(note.note_count,0) note_count,
-    (select count(*) from photo_comment c where c.photo_id=p.id and c.deleted_at is null
+    (select count(*) from photo_comment c where c.photo_id=p.id and c.retouched_photo_id is null and c.deleted_at is null
       and c.created_at > coalesce((select max(last_read_at) from comment_read where job_id=p.job_id and reader_type='staff'),'')
     ) unread_comment_count
     from photo p
     left join (select photo_id,count(*) selected_count from selection group by photo_id) sel on sel.photo_id=p.id
     left join (select a.photo_id,count(*) slot_count,group_concat(j.name,'、') slot_names from slot_assignment a join job_item j on j.id=a.job_item_id where a.is_final=1 group by a.photo_id) slot on slot.photo_id=p.id
-    left join (select photo_id,count(*) comment_count from photo_comment where deleted_at is null group by photo_id) cmt on cmt.photo_id=p.id
+    left join (select photo_id,count(*) comment_count from photo_comment where retouched_photo_id is null and deleted_at is null group by photo_id) cmt on cmt.photo_id=p.id
     left join (select photo_id,count(*) note_count from photo_note group by photo_id) note on note.photo_id=p.id`;
   const photoCounts = jobId => {
     const row = db.prepare(`select count(*) total,
@@ -173,7 +173,7 @@ export function registerAdmin(app, ctx) {
     jobs = jobs.map(job => {
       const total = db.prepare("select count(*) count from selector where job_id=? and permission='select_submit'").get(job.id).count;
       const submitted = db.prepare("select count(*) count from selector where job_id=? and permission='select_submit' and submitted_at is not null").get(job.id).count;
-      const unread = db.prepare("select count(*) count from photo_comment c where c.job_id=? and c.deleted_at is null and c.created_at>(select coalesce(max(last_read_at),'') from comment_read where job_id=? and reader_type='staff')").get(job.id, job.id).count;
+      const unread = db.prepare("select count(*) count from photo_comment c where c.job_id=? and c.retouched_photo_id is null and c.deleted_at is null and c.created_at>(select coalesce(max(last_read_at),'') from comment_read where job_id=? and reader_type='staff')").get(job.id, job.id).count;
       return { ...job, submitted_progress: { submitted, total }, merged_count: union(db, job.id).count, unread_comment_count: unread, expired: Boolean(job.deadline_at && job.deadline_at < now() && job.status !== 'locked') };
     });
     res.json({ jobs });
@@ -533,7 +533,7 @@ export function registerAdmin(app, ctx) {
     if (!ownedJob(req.params.id, req.actor)) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
     const selectors = new Map(db.prepare('select id,name from selector where job_id=?').all(+req.params.id).map(row => [row.id, row.name]));
     const staff = new Map(db.prepare('select id,name from staff').all().map(row => [row.id, row.name]));
-    const comments = db.prepare('select * from photo_comment where job_id=? order by photo_id,created_at,id').all(+req.params.id).map(comment => ({
+    const comments = db.prepare('select * from photo_comment where job_id=? and retouched_photo_id is null order by photo_id,created_at,id').all(+req.params.id).map(comment => ({
       ...comment,
       content: comment.deleted_at ? '' : comment.content,
       deleted: Boolean(comment.deleted_at),
@@ -661,7 +661,7 @@ export function registerAdmin(app, ctx) {
   app.delete('/api/admin/jobs/:id/photos/:photoId/comments/:commentId', requireActor('staff'), (req, res) => {
     const job = ownedJob(req.params.id, req.actor);
     if (!job) return jsonError(res, 404, 'NOT_FOUND', '任务不存在');
-    const comment = db.prepare('select * from photo_comment where id=? and job_id=? and photo_id=? and deleted_at is null').get(+req.params.commentId, job.id, +req.params.photoId);
+    const comment = db.prepare('select * from photo_comment where id=? and job_id=? and photo_id=? and retouched_photo_id is null and deleted_at is null').get(+req.params.commentId, job.id, +req.params.photoId);
     if (!comment) return jsonError(res, 404, 'NOT_FOUND', '评论不存在');
     db.prepare('update photo_comment set deleted_at=? where id=?').run(now(), comment.id);
     event(job.id, 'comment.deleted', req.actor, { comment_id: comment.id, photo_id: comment.photo_id, visibility: comment.visibility, audience_selector_id: comment.audience_selector_id });

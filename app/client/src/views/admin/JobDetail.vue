@@ -18,6 +18,7 @@ const tabs = [
   ['photos', '照片'],
   ['selectors', '选片人'],
   ['comments', '评论'],
+  ['retouched', '精修交付'],
   ['settings', '设置'],
   ['logs', '日志'],
 ];

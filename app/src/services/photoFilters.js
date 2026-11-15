@@ -20,7 +20,7 @@ export function photoFilterCondition(filter, alias = 'p') {
   if (type === 'unselected') return `${visible} and not exists(select 1 from selection s where s.photo_id=${alias}.id)`;
   if (type === 'selector') return `${visible} and exists(select 1 from selection s where s.photo_id=${alias}.id and s.selector_id=${Number(selectorId)})`;
   if (type === 'slot') return `${visible} and exists(select 1 from slot_assignment a where a.photo_id=${alias}.id and a.is_final=1)`;
-  if (type === 'commented') return `${alias}.deleted_at is null and exists(select 1 from photo_comment c where c.photo_id=${alias}.id and c.deleted_at is null)`;
+  if (type === 'commented') return `${alias}.deleted_at is null and exists(select 1 from photo_comment c where c.photo_id=${alias}.id and c.retouched_photo_id is null and c.deleted_at is null)`;
   if (type === 'noted') return `${alias}.deleted_at is null and exists(select 1 from photo_note n where n.photo_id=${alias}.id)`;
   if (type === 'hidden') return `${alias}.deleted_at is null and ${alias}.hidden=1`;
   if (type === 'processing') return `${alias}.deleted_at is null and ${alias}.import_status<>'ready'`;
@@ -34,7 +34,7 @@ function countWhere(db, jobId, condition) {
 export function photoFilterCounts(db, jobId, selectors = []) {
   const lastRead = db.prepare("select coalesce(max(last_read_at),'') last_read_at from comment_read where job_id=? and reader_type='staff'").get(jobId).last_read_at;
   const commentedUnread = db.prepare(`select count(distinct p.id) count from photo p join photo_comment c on c.photo_id=p.id
-    where p.job_id=? and p.deleted_at is null and c.deleted_at is null and c.created_at>?`).get(jobId, lastRead).count;
+    where p.job_id=? and p.deleted_at is null and c.retouched_photo_id is null and c.deleted_at is null and c.created_at>?`).get(jobId, lastRead).count;
   return {
     all: countWhere(db, jobId, '1=1'),
     selected: countWhere(db, jobId, photoFilterCondition({ type: 'selected' })),

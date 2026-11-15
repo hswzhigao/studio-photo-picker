@@ -25,6 +25,13 @@ describe('visibility service', () => {
     expect(canSeeSelection({ selector_id: 2, share_selection: 1 }, 3)).toBe(true);
   });
 
+  it.each(['uploaded', 'paired', 'published', 'withdrawn'])('keeps retouched.%s events staff-only regardless of numeric actor ID collisions', kind => {
+    const event = { kind: `retouched.${kind}`, actor_type: 'staff', actor_id: 2, payload: JSON.stringify({ retouched_photo_id: 4, asset_id: 'asset', version: 1, photo_id: null }) };
+    expect(canSeeEvent(event, { actor_type: 'staff', actor_id: 3 })).toBe(true);
+    expect(canSeeEvent(event, { actor_type: 'selector', actor_id: 3 })).toBe(false);
+    expect(canSeeEvent(event, { actor_type: 'selector', actor_id: 2 })).toBe(false);
+  });
+
   it('counts only the selections a viewer is allowed to see', () => {
     const db = { prepare: (sql) => ({ get: (...args) => {
       expect(sql).toContain('count(*)');

@@ -12,6 +12,9 @@ export function visiblePhotoCondition(alias = 'p') {
 
 export function canSeeEvent(event, actor) {
   if (actor.actor_type === 'staff') return true;
+  // Delivery events are staff-only; clients refresh published versions instead.
+  // Retouched comment events need an explicit audience policy before this guard.
+  if (event.kind.startsWith('retouched.')) return false;
   let payload;
   try { payload = typeof event.payload === 'string' ? JSON.parse(event.payload || '{}') : (event.payload || {}); } catch { return false; }
   if (event.kind.startsWith('comment.')) return payload.visibility === 'all' || payload.audience_selector_id === actor.actor_id || payload.selector_id === actor.actor_id;

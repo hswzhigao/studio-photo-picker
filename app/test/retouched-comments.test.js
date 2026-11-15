@@ -1,0 +1,111 @@
+import { describe,it,expect,beforeEach,afterEach } from 'vitest';
+import request from 'supertest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {createApp} from '../src/app.js';
+import {photoImpact} from '../src/services/photoManager.js';
+import {getDb,initializeDatabase} from '../src/db/connection.js';
+
+describe('retouched comments',()=>{
+ let db,app,root,staff,client,peer;
+ const base='/api/client/jobs/1/retouched/1/comments';
+ const admin='/api/admin/jobs/1/retouched/1/comments';
+ const create=(body={content:'private feedback'})=>client.post(base).send(body);
+ beforeEach(()=>{
+  db=getDb(':memory:');initializeDatabase(db);root=fs.mkdtempSync(path.join(os.tmpdir(),'comments-'));
+  db.exec(`insert into studio(id,name,watermark_text,sms_sign) values(1,'S','W','S'),(2,'T','W','S');
+   insert into staff(id,studio_id,name,phone,role,password_hash,must_change_password) values(1,1,'Staff','1','admin','x',0),(2,2,'Foreign','2','admin','x',0);
+   insert into customer(id,studio_id,name,phone,password_hash,must_change_password,created_at,updated_at) values(1,1,'C','3','x',0,'now','now'),(2,1,'P','4','x',0,'now','now');
+   insert into job(id,studio_id,title,deadline_at,invite_token,created_by,status) values(1,1,'J','now','j',1,'locked'),(2,1,'K','now','k',1,'selecting');
+   insert into selector(id,job_id,customer_id,name,phone,permission,share_selection) values(7,1,1,'Selector','3','select_submit',1),(8,1,2,'Peer','4','select_submit',1);
+   insert into session(token,actor_type,actor_id,password_version,created_at,expires_at) values('s','staff',1,0,'now','2099-01-01'),('c','customer',1,0,'now','2099-01-01'),('p','customer',2,0,'now','2099-01-01'),('f','staff',2,0,'now','2099-01-01');
+   insert into photo(id,job_id,filename,original_key,import_status) values(1,1,'a.jpg','/a','ready'),(2,1,'b.jpg','/b','ready');
+   insert into retouched_photo(id,job_id,photo_id,asset_id,version,status,file_key,filename,created_at) values(1,1,1,'a',1,'published','/a','a.jpg','now'),(2,1,null,'b',1,'published','/b','b.jpg','now');`);
+  app=createApp({db,cfg:{dataDir:root,photoSourceDir:root}});
+  staff=request.agent(app).set('Cookie','session=s');client=request.agent(app).set('Cookie','session=c');peer=request.agent(app).set('Cookie','session=p');
+ });
+ afterEach(async()=>{app.locals.stopBackgroundTasks();await app.locals.waitForTasks();db.close();fs.rmSync(root,{recursive:true,force:true});});
+ it('migrates legacy replies preserving ids, data, indexes and foreign keys',()=>{
+  const legacy=getDb(':memory:');
+  for(const file of fs.readdirSync(new URL('../src/db/migrations/',import.meta.url)).filter(f=>/^\d+_/.test(f)&&f<'012').sort())legacy.exec(fs.readFileSync(new URL(`../src/db/migrations/${file}`,import.meta.url),'utf8'));
+  legacy.exec(`create table schema_migrations(version text primary key,applied_at text not null); insert into studio(id,name,watermark_text,sms_sign) values(1,'S','W','S'); insert into staff(id,studio_id,name,phone,role,password_hash) values(1,1,'S','1','admin','x'); insert into job(id,studio_id,title,deadline_at,invite_token,created_by) values(1,1,'J','now','j',1); insert into photo(id,job_id,filename,original_key) values(1,1,'a','a'); insert into photo_comment(id,job_id,photo_id,parent_id,author_type,author_id,content,created_at) values(41,1,1,null,'staff',1,'root','now'),(42,1,1,41,'staff',1,'reply','now');`);
+  for(let i=1;i<=11;i++)legacy.prepare('insert into schema_migrations values(?,?)').run(String(i).padStart(3,'0'),'now');
+  const before=legacy.prepare('select * from photo_comment order by id').all();initializeDatabase(legacy);
+  expect(legacy.prepare('pragma table_info(photo_comment)').all().find(c=>c.name==='photo_id').notnull).toBe(0);
+  expect(legacy.prepare('select * from photo_comment order by id').all()).toEqual(before.map(c=>({...c,retouched_photo_id:null})));
+  expect(legacy.pragma('foreign_key_check')).toEqual([]);expect(legacy.prepare("select name from sqlite_master where type='index' and tbl_name='photo_comment'").all().map(x=>x.name)).toEqual(expect.arrayContaining(['idx_comment_job_photo','idx_comment_job_created','idx_comment_retouched']));
+  expect(()=>legacy.exec("insert into photo_comment(job_id,photo_id,author_type,author_id,content,created_at) values(1,null,'staff',1,'bad','now')")).toThrow();legacy.close();
+ });
+ it('defaults private, uses selector identity and isolates every original comment surface',async()=>{
+  const c=(await create().expect(201)).body.comment;
+  expect(c).toMatchObject({visibility:'studio_only',author_type:'customer',author_id:7,audience_selector_id:7,retouched_photo_id:1,photo_id:1,author_name:'Selector'});
+  expect((await client.get('/api/client/jobs/1/photos/1/comments').expect(200)).body.comments).toEqual([]);
+  expect((await peer.get(base).expect(200)).body.comments).toEqual([]);
+  expect((await client.get('/api/client/jobs/1/retouched/1').expect(200)).body.photo.comment_count).toBe(1);
+  expect((await peer.get('/api/client/jobs/1/retouched/1').expect(200)).body.photo.comment_count).toBe(0);
+  await client.patch(`/api/client/jobs/1/photos/1/comments/${c.id}`).send({content:'attack'}).expect(404);
+  await client.delete(`/api/client/jobs/1/photos/1/comments/${c.id}`).expect(404);
+  await staff.delete(`/api/admin/jobs/1/photos/1/comments/${c.id}`).expect(404);
+  await client.post('/api/client/jobs/1/photos/1/comments').send({content:'cross',parent_id:c.id}).expect(404);
+  expect((await staff.get('/api/admin/jobs/1/comments').expect(200)).body.comments).toEqual([]);
+  expect((await staff.get('/api/admin/jobs/1/photos/1/comments').expect(200)).body.comments).toEqual([]);
+  await staff.post('/api/admin/jobs/1/photos/1/comments').send({content:'cross',parent_id:c.id}).expect(404);
+  expect(db.prepare("select actor_type,actor_id from audit_log where action='retouched.comment.created'").get()).toEqual({actor_type:'customer',actor_id:7});
+  const e=db.prepare("select payload from change_event where kind='retouched.comment.created'").get();expect(JSON.parse(e.payload)).toMatchObject({visibility:'studio_only',audience_selector_id:7});expect(e.payload).not.toContain('private feedback');
+  expect((await peer.get('/api/client/jobs/1/changes').expect(200)).body.events).toEqual([]);
+ });
+ it('excludes feedback from original counts, filters, unread badges and deletion impact',async()=>{
+  await create().expect(201);
+  expect(photoImpact(db,1).comment_count).toBe(0);
+  const photos=(await staff.get('/api/admin/jobs/1/photos').expect(200)).body;
+  expect(photos.photos.find(p=>p.id===1)).toMatchObject({comment_count:0,unread_comment_count:0});
+  expect(photos.filter_counts).toMatchObject({commented:0,commented_unread:0});
+  expect((await staff.get('/api/admin/jobs/1/photos?filter=commented').expect(200)).body.photos).toEqual([]);
+  const original=(await client.get('/api/client/jobs/1').expect(200)).body.photos.find(p=>p.id===1);expect(original.unread_comment_count).toBe(0);
+ });
+ it('supports null pairs, public same-order access, private replies and one level only',async()=>{
+  const c=(await create().expect(201)).body.comment;
+  await peer.post(base).send({content:'snoop',parent_id:c.id}).expect(404);
+  await client.post('/api/client/jobs/1/retouched/2/comments').send({content:'cross',parent_id:c.id}).expect(404);
+  const reply=(await staff.post(admin).send({content:'reply',parent_id:c.id,visibility:'all'}).expect(201)).body.comment;
+  expect(reply).toMatchObject({visibility:'studio_only',audience_selector_id:7});
+  await client.post(base).send({content:'nested',parent_id:reply.id}).expect(400);
+  const pub=(await client.post('/api/client/jobs/1/retouched/2/comments').send({content:'public',visibility:'all'}).expect(201)).body.comment;expect(pub.photo_id).toBeNull();
+  expect((await peer.get('/api/client/jobs/1/retouched/2/comments').expect(200)).body.comments).toHaveLength(1);
+  await client.get('/api/client/jobs/2/retouched/1/comments').expect(404);
+  await request(app).get(admin).set('Cookie','session=f').expect(404);
+  expect(()=>db.exec("insert into photo_comment(job_id,photo_id,retouched_photo_id,author_type,author_id,content,created_at) values(1,2,1,'staff',1,'wrong photo','now')")).toThrow();
+  expect(db.pragma('foreign_key_check')).toEqual([]);
+ });
+ it('validates content/visibility and enforces own five minute edits and deletes',async()=>{
+  for(const content of ['', '   ', 'x'.repeat(501),{}])await create({content}).expect(400);
+  await create({content:'x',visibility:'invalid'}).expect(400);
+  const c=(await create({content:'x'.repeat(500)}).expect(201)).body.comment;
+  await peer.patch(`${base}/${c.id}`).send({content:'steal'}).expect(404);
+  await peer.delete(`${base}/${c.id}`).expect(404);
+  await client.patch(`${base}/${c.id}`).send({content:'edited'}).expect(200);
+  db.prepare('update photo_comment set created_at=? where id=?').run('2000-01-01',c.id);
+  await client.patch(`${base}/${c.id}`).send({content:'late'}).expect(400);await client.delete(`${base}/${c.id}`).expect(400);
+  const fresh=(await create().expect(201)).body.comment;await client.delete(`${base}/${fresh.id}`).expect(200);
+ });
+ it.each(['locked','retouching','delivered'])('allows feedback in %s but history is read-only for customers',async status=>{
+  db.prepare('update job set status=? where id=1').run(status);const c=(await create().expect(201)).body.comment;
+  db.exec("insert into retouched_photo(job_id,photo_id,asset_id,version,status,file_key,filename,created_at) values(1,1,'a',2,'published','/v2','v2.jpg','now')");
+  await create().expect(409);await staff.post(admin).send({content:'history reply',parent_id:c.id}).expect(201);
+  expect((await client.get(base).expect(200)).body.comments).toHaveLength(2);
+  db.exec("update retouched_photo set status='withdrawn' where id=1");await client.get(base).expect(404);
+ });
+ it('rolls back mutations when audit or event fails and forbids re-pairing feedback assets',async()=>{
+  const c=(await create().expect(201)).body.comment;
+  db.exec("update retouched_photo set status='withdrawn' where id=1");
+  await staff.patch('/api/admin/jobs/1/retouched/1').send({photo_id:2}).expect(409);
+  expect(db.prepare('select photo_id from photo_comment where id=?').get(c.id).photo_id).toBe(1);
+  db.exec("update retouched_photo set status='published' where id=1; create trigger fail_audit before insert on audit_log begin select raise(abort,'audit failure'); end;");
+  const before=db.prepare('select count(*) n from change_event').get().n;
+  await create().expect(500);expect(db.prepare('select count(*) n from photo_comment').get().n).toBe(1);expect(db.prepare('select count(*) n from change_event').get().n).toBe(before);
+  await client.patch(`${base}/${c.id}`).send({content:'lost'}).expect(500);expect(db.prepare('select content from photo_comment where id=?').get(c.id).content).toBe('private feedback');
+  await client.delete(`${base}/${c.id}`).expect(500);expect(db.prepare('select deleted_at from photo_comment where id=?').get(c.id).deleted_at).toBeNull();
+  db.exec("drop trigger fail_audit; create trigger fail_event before insert on change_event begin select raise(abort,'event failure'); end;");await create().expect(500);expect(db.prepare('select count(*) n from photo_comment').get().n).toBe(1);
+ });
+});

@@ -16,5 +16,6 @@ describe('client router', () => {
     const paths = flatten(routes);
     expect(paths).toEqual(expect.arrayContaining(['/', '/jobs/:id', '/jobs/:id/selected', '/jobs/:id/review', '/admin']));
     expect(paths).toEqual(expect.arrayContaining(['/admin/jobs/:id/photos', '/admin/jobs/:id/summary', '/admin/jobs/:id/comments']));
+    expect(paths).toEqual(expect.arrayContaining(['/jobs/:id/retouched', '/admin/jobs/:id/retouched']));
   });
 });
