@@ -10,6 +10,7 @@ import {
   uploadUrl,
 } from "../../utils/retouched";
 import RetouchedViewer from "../../components/RetouchedViewer.vue";
+import RetouchedPairPicker from "../../components/RetouchedPairPicker.vue";
 import "../../retouched.css";
 const route = useRoute(),
   admin = inject("admin", { actor: null });
@@ -24,11 +25,12 @@ const photos = ref([]),
   uploading = ref(false),
   busy = ref(false),
   targetAsset = ref(""),
-  pairId = ref("");
+  pairId = ref(""),
+  uploadPicker = ref(false),
+  pairing = ref(null);
 const gate = latestRequest();
 let alive = true,
   contextToken = 0;
-const pendingPair = ref(null);
 const allVersions = computed(() =>
   photos.value.flatMap((p) => (p.versions?.length ? p.versions : [p])),
 );
@@ -158,30 +160,63 @@ function versionUpload(photo) {
   pairId.value = "";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
-function associate(photo, event) {
-  if (busy.value || uploading.value) return;
-  const photoId = Number(event.target.value) || null;
-  pendingPair.value = {
-    photo,
-    photoId,
-    original: originals.value.find((p) => p.id === photoId),
-  };
-  event.target.value = photo.photo_id || "";
+function publishedIdsOf(photo) {
+  return (photo.versions?.length ? photo.versions : [photo])
+    .filter((v) => v.status === "published")
+    .map((v) => v.id);
 }
-async function confirmPair() {
-  if (busy.value || !pendingPair.value) return;
-  const { photo, photoId } = pendingPair.value;
+function pickUploadPair(photoId) {
+  uploadPicker.value = false;
+  pairId.value = photoId == null ? "" : String(photoId);
+}
+async function pickCardPair(photoId) {
+  const photo = pairing.value;
+  pairing.value = null;
+  if (photo) await applyPair(photo, photoId);
+}
+async function applyPair(photo, photoId) {
+  if (busy.value || uploading.value) return;
+  const target = photoId == null ? null : Number(photoId);
+  if ((photo.photo_id ?? null) === target) return;
+  const ids = publishedIdsOf(photo);
+  if (
+    ids.length &&
+    !window.confirm(
+      `将先撤回已发布的 V${photo.version}，重新关联修前原片后再发布；期间客户短暂不可见。继续？`,
+    )
+  )
+    return;
   const url = base.value;
   busy.value = true;
   error.value = "";
-  try {
-    await api.patch(`${url}/${photo.id}`, { photo_id: photoId });
-    if (base.value === url) {
-      pendingPair.value = null;
-      await load();
+  const steps = ids.length
+    ? [
+        ["撤回已发布版", () => api.post(`${url}/withdraw`, { ids })],
+        ["关联修前原片", () => api.patch(`${url}/${photo.id}`, { photo_id: target })],
+        ["重新发布", () => api.post(`${url}/publish`, { ids })],
+      ]
+    : [["关联修前原片", () => api.patch(`${url}/${photo.id}`, { photo_id: target })]];
+  let failed = "",
+    withdrawn = false;
+  for (const [step, run] of steps) {
+    try {
+      await run();
+      if (step === "撤回已发布版") withdrawn = true;
+    } catch (e) {
+      failed = `${step}失败：${e.message || "请重试"}`;
+      break;
     }
-  } catch (e) {
-    if (base.value === url) error.value = e.message || "关联失败";
+  }
+  try {
+    if (base.value === url) {
+      await load();
+      // Set after load(): a successful list reload clears error.value.
+      error.value = failed
+        ? withdrawn
+          ? `${failed} 现为草稿，可勾选后手动发布。`
+          : failed
+        : "";
+    }
   } finally {
     busy.value = false;
   }
@@ -219,7 +254,8 @@ watch(
   () => {
     contextToken++;
     gate.next();
-    pendingPair.value = null;
+    pairing.value = null;
+    uploadPicker.value = false;
     photos.value = [];
     originals.value = [];
     selected.value = [];
@@ -278,21 +314,38 @@ onUnmounted(() => {
             </option>
           </select></label
         >
-        <label v-if="!targetAsset"
-          >关联修前原片（可选）<select v-model="pairId" :disabled="uploading">
-            <option value="">暂不关联</option>
-            <option v-for="p in originals" :key="p.id" :value="p.id">
-              #{{ p.id }} · {{ p.display_name || p.filename }}
-            </option>
-          </select></label
-        >
+        <div v-if="!targetAsset" class="rt-pair-field">
+          <span>关联修前原片（可选）</span>
+          <div class="rt-actions">
+            <button
+              type="button"
+              class="button ghost"
+              :disabled="uploading || busy"
+              @click="uploadPicker = true"
+            >
+              <img
+                v-if="pair"
+                class="rt-pair-chip"
+                :src="pair.thumb_url"
+                alt=""
+              />{{
+                pair
+                  ? `#${pair.id} · ${pair.display_name || pair.filename}`
+                  : "选择修前原片"
+              }}
+            </button>
+            <button
+              v-if="pair"
+              type="button"
+              class="button ghost small"
+              :disabled="uploading || busy"
+              @click="pairId = ''"
+            >
+              清空（暂不关联）
+            </button>
+          </div>
+        </div>
       </div>
-      <img
-        v-if="pair"
-        class="rt-pair-thumb"
-        :src="pair.thumb_url"
-        alt="待关联修前原片，请核对"
-      />
       <p class="muted">
         {{
           targetAsset
@@ -343,39 +396,6 @@ onUnmounted(() => {
       <p v-if="hasUploads" role="status">
         请等待本批上传完成后切换订单；上传成功不会自动发布。
       </p>
-    </section>
-    <section
-      v-if="pendingPair"
-      class="rt-pair-review"
-      aria-label="关联原片核对"
-    >
-      <h3>核对修前 / 修后</h3>
-      <div class="rt-pair">
-        <img :src="pendingPair.photo.thumb_url" alt="待关联的修后照片" /><img
-          v-if="pendingPair.original"
-          :src="pendingPair.original.thumb_url"
-          alt="待关联的修前原片"
-        />
-        <p>
-          {{ pendingPair.photo.filename }} →
-          {{
-            pendingPair.original?.display_name ||
-            pendingPair.original?.filename ||
-            "不关联原片"
-          }}
-        </p>
-      </div>
-      <div class="rt-actions">
-        <button class="button primary" :disabled="busy" @click="confirmPair">
-          确认关联</button
-        ><button
-          class="button ghost"
-          :disabled="busy"
-          @click="pendingPair = null"
-        >
-          取消
-        </button>
-      </div>
     </section>
     <div class="rt-batch">
       <span>已勾选 {{ selected.length }} 个版本</span
@@ -438,22 +458,14 @@ onUnmounted(() => {
           >
             上传新版
           </button>
-          <label
-            >关联原片<select
-              :value="photo.photo_id || ''"
-              :disabled="
-                busy ||
-                uploading ||
-                photo.versions?.some((v) => v.status === 'published')
-              "
-              @change="associate(photo, $event)"
-            >
-              <option value="">未关联</option>
-              <option v-for="p in originals" :key="p.id" :value="p.id">
-                #{{ p.id }} · {{ p.display_name || p.filename }}
-              </option>
-            </select></label
+          <button
+            type="button"
+            class="button ghost small"
+            :disabled="busy || uploading"
+            @click="pairing = photo"
           >
+            {{ photo.photo_id ? `重新关联 · #${photo.photo_id}` : "关联原片" }}
+          </button>
           <div v-if="photo.photo_id" class="rt-pair">
             <img
               :src="originals.find((p) => p.id === photo.photo_id)?.thumb_url"
@@ -487,6 +499,22 @@ onUnmounted(() => {
       @move="index = $event"
       @close="index = null"
       @changed="load()"
+    />
+    <RetouchedPairPicker
+      v-if="uploadPicker"
+      :originals="originals"
+      :current-id="Number(pairId) || null"
+      :busy="busy || uploading"
+      @select="pickUploadPair"
+      @close="uploadPicker = false"
+    />
+    <RetouchedPairPicker
+      v-if="pairing"
+      :originals="originals"
+      :current-id="pairing.photo_id || null"
+      :busy="busy || uploading"
+      @select="pickCardPair"
+      @close="pairing = null"
     />
   </section>
 </template>

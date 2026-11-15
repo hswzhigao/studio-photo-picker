@@ -30,7 +30,8 @@ vi.mock("vue-router", () => ({ useRoute: () => route, onBeforeRouteLeave() {}, o
 
 const RetouchedFeedback = clientComponent("./components/RetouchedFeedback.vue");
 const RetouchedViewer = clientComponent("./components/RetouchedViewer.vue", { RetouchedFeedback });
-const Retouched = clientComponent("./views/admin/Retouched.vue", { RetouchedViewer });
+const RetouchedPairPicker = clientComponent("./components/RetouchedPairPicker.vue");
+const Retouched = clientComponent("./views/admin/Retouched.vue", { RetouchedViewer, RetouchedPairPicker });
 
 // Real Vue components/events with a small host renderer; no browser/DOM dependency.
 function node(tag, text = "") {
@@ -136,10 +137,13 @@ describe("review regressions: actual component lifecycle and key handlers", () =
       throw new Error("old list error");
     });
     const v = mount(Retouched, {}); await flush();
+    // The pair select became a picker dialog: open it to observe the offered originals.
+    v.find(n => n.tag === "button" && text(n).includes("选择修前原片")).props.onClick(); await flush();
     expect(text(v.root)).toContain("allowed.jpg");
     expect(text(v.root)).not.toContain("hidden.jpg");
     expect(text(v.root)).not.toContain("processing.jpg");
     expect(text(v.root)).not.toContain("deleted.jpg");
+    v.find(n => n.props["aria-label"] === "关闭选择器").props.onClick(); await flush();
     get.mockResolvedValue({ photos: [] });
     const input = v.find(n => n.tag === "input" && n.props.type === "file");
     await input.props.onChange({ target: { files: [{ name: "new.jpg", type: "image/jpeg" }], value: "new.jpg" } }); await flush();
