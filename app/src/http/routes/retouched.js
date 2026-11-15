@@ -112,7 +112,7 @@ export function registerRetouched(app, ctx) {
         const rows=ids.map(id=>getRetouched(db,+req.params.id,id,req.actor));
         if(rows.some(r=>r.status!==(action==='publish'?'ready':'published')))throw retouchedError('INVALID_STATUS',409);
         if(action==='publish' && rows.some(r=>!r.sha256||!r.width||!r.height||!safeFile(r.file_key,[retouchedRoot(cfg)])||!safeFile(r.thumb_key,[retouchedRoot(cfg)])))throw retouchedError('INVALID_FILE');
-        for(const r of rows) db.prepare('update retouched_photo set status=?,published_at=case when ?=\'published\' then ? else published_at end where id=?').run(action==='publish'?'published':'withdrawn',action==='publish'?'published':'withdrawn',new Date().toISOString(),r.id);
+        for(const r of rows) db.prepare('update retouched_photo set status=?,published_at=case when ?=\'published\' then ? else published_at end where id=?').run(action==='publish'?'published':'ready',action==='publish'?'published':'withdrawn',new Date().toISOString(),r.id);
         return ids.map(id=>getRetouched(db,+req.params.id,id,req.actor));
       });res.json({photos:result.map(r=>view(req,r))});
     }));

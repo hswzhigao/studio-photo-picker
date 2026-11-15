@@ -127,7 +127,20 @@ describe('retouched delivery', () => {
     await admin.post(base(job) + '/withdraw').send({ ids: [b.id] }).expect(200);
     await client.get(`${cb(job)}/${b.id}`).expect(404);
     expect((await client.get(cb(job))).body.photos[0].id).toBe(a.id);
-    await publish(b.id).expect(409);
+    await publish(b.id).expect(200);
+    expect((await client.get(cb(job))).body.photos[0].id).toBe(b.id);
+  });
+  it('repairs pairing after withdrawal and republishes the same version', async () => {
+    db.exec("insert into photo(id,job_id,filename,original_key,import_status,hidden) values(1,1,'pre','pre','ready',0)");
+    const a = (await upload(await jpeg('#eeaa01'))).body.photo;
+    await publish(a.id).expect(200);
+    await admin.patch(`${base(job)}/${a.id}`).send({ photo_id: 1 }).expect(409);
+    await admin.post(base(job) + '/withdraw').send({ ids: [a.id] }).expect(200);
+    expect(photo(a.id).status).toBe('ready');
+    await admin.patch(`${base(job)}/${a.id}`).send({ photo_id: 1 }).expect(200);
+    await publish(a.id).expect(200);
+    const current = (await client.get(cb(job))).body.photos[0];
+    expect(current).toMatchObject({ id: a.id, photo_id: 1, before_url: '/media/previews/1.webp' });
   });
   it('rejects unauthorized jobs, invalid associations and invalid atomic batches', async () => {
     await upload(await jpeg('#445566'), '', foreign).expect(404);
